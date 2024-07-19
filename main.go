@@ -6,14 +6,21 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/gempir/go-twitch-irc/v4"
+	"github.com/gocarina/gocsv"
 	"github.com/joho/godotenv"
 )
 
 const rootDir = "channels"
+
+type user struct {
+	Name     string    `csv:"name"`
+	LastSeen time.Time `csv:"last_seen"`
+}
 
 func getUsers(client *twitch.Client, channelName string) []string {
 	userNames, err := client.Userlist(channelName)
@@ -23,7 +30,7 @@ func getUsers(client *twitch.Client, channelName string) []string {
 	return userNames
 }
 
-func writeUsers(channelName string, userNames []string) {
+func updateUsersFile(channelName string, userNames []string) {
 	dirPath := filepath.Join(rootDir, channelName)
 	mkDir(dirPath)
 	f, err := os.OpenFile(filepath.Join(dirPath, "users.csv"), os.O_RDWR|os.O_CREATE, 0644)
@@ -32,14 +39,42 @@ func writeUsers(channelName string, userNames []string) {
 	}
 	defer f.Close()
 
-	f.WriteString(userNames[0])
+	fi, err := f.Stat()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	users := []user{}
+	if fi.Size() != 0 {
+		usersFromFile := []user{}
+		if err = gocsv.UnmarshalFile(f, &usersFromFile); err != nil {
+			log.Fatal(err)
+		}
+		// filter online users
+		for _, user := range usersFromFile {
+			if slices.Contains(userNames, user.Name) { continue }
+			users = append(users, user)
+		}
+	}
+
+	timeNow := time.Now()
+	for _, userName := range userNames {
+		users = append(users, user{userName, timeNow})
+	}
+	if _, err = f.Seek(0,0); err != nil {
+		log.Fatal(err)
+	}
+	if err = gocsv.MarshalFile(&users, f); err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Updated user list for %s", channelName)
 }
 
 func updateUsers(client *twitch.Client, channelName string) {
 	for {
 		time.Sleep(5 * time.Minute)
 		userNames := getUsers(client, channelName)
-		writeUsers(channelName, userNames)
+		updateUsersFile(channelName, userNames)
 	}
 }
 
@@ -71,9 +106,9 @@ func main() {
 		}()
 	})
 
-	client.OnPrivateMessage(func(message twitch.PrivateMessage) {
-		client.Say(message.Channel, "hey")
-	})
+	// client.OnPrivateMessage(func(message twitch.PrivateMessage) {
+	// 	client.Say(message.Channel, "hey")
+	// })
 
 	channels := strings.Split(os.Getenv("CHANNELS"), ",")
 	client.Join(channels...)

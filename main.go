@@ -65,7 +65,7 @@ func updateUsersFile(channelName string, userNames []string) {
 	slices.SortFunc(users, func(a, b user) int {
 		return a.LastSeen.Compare(b.LastSeen)
 	})
-	
+
 	if _, err = f.Seek(0,0); err != nil {
 		log.Fatal(err)
 	}
@@ -102,6 +102,7 @@ func main() {
 	pass := os.Getenv("PASS")
 
 	client := twitch.NewClient(nick, pass)
+	client.Capabilities = append(client.Capabilities, twitch.MembershipCapability)
 
 	client.OnSelfJoinMessage(func(message twitch.UserJoinMessage) {
 		go func() {

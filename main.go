@@ -19,26 +19,30 @@ import (
 
 const rootDir = "channels"
 
-var apiClient *helix.Client
+type apiClient struct {
+	*helix.Client
+	channel string
+}
+
+func newApiClient(channel, uat string) *apiClient {
+	client, err := helix.NewClient(&helix.Options{
+		ClientID:        "jmaoofuyr1c4v8lqzdejzfppdj5zym",
+		UserAccessToken: uat,
+	})
+	if err != nil {
+		log.Fatalf("Error creating API client for %s", channel)
+	}
+
+	return &apiClient{client, channel}
+}
 
 type user struct {
 	Name     string    `csv:"name"`
 	LastSeen time.Time `csv:"last_seen"`
 }
 
-func getUserNames(client *twitch.Client, channelName string) ([]string, error) {
-	userNames, err := client.Userlist(channelName)
-	if err != nil {
-		log.Printf("Error getting User list of %s", channelName)
-		return nil, err
-	}
-	return userNames, nil
-}
-
-func getUsersInfo(names ...string) ([]helix.User, error) {
-	resp, err := apiClient.GetUsers(&helix.UsersParams{
-		Logins: names,
-	})
+func (ac apiClient) getUsersInfo(names ...string) ([]helix.User, error) {
+	resp, err := ac.GetUsers(&helix.UsersParams{Logins: names})
 
 	if err != nil {
 		log.Print("Error getting users info")
@@ -48,13 +52,13 @@ func getUsersInfo(names ...string) ([]helix.User, error) {
 	return resp.Data.Users, nil
 }
 
-func getVipNames(channelName string) ([]string, error) {
-	usersInfo, err := getUsersInfo(channelName)
+func (ac apiClient) getVipNames(channelName string) ([]string, error) {
+	usersInfo, err := ac.getUsersInfo(channelName)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := apiClient.GetChannelVips(&helix.GetChannelVipsParams{
+	resp, err := ac.GetChannelVips(&helix.GetChannelVipsParams{
 		BroadcasterID: usersInfo[0].ID,
 		First:         100,
 	})
@@ -121,16 +125,16 @@ func updateUsersFile(channelName string, userNames []string) {
 	log.Printf("Updated user list for %s", channelName)
 }
 
-func updateUsers(client *twitch.Client, channelName string) {
+func updateUsers(ircClient *twitch.Client, apiClient *apiClient, channelName string) {
 	for {
 		time.Sleep(5 * time.Minute)
-		userNames, err := getUserNames(client, channelName)
+		userNames, err := ircClient.Userlist(channelName)
 		if err != nil {
 			log.Print(err)
 			continue
 		}
 
-		vipNames, err := getVipNames(channelName)
+		vipNames, err := apiClient.getVipNames(channelName)
 		if err != nil {
 			log.Print(err)
 			continue
@@ -164,6 +168,13 @@ func main() {
 
 	nick := os.Getenv("SA_NICK")
 	pass := os.Getenv("SA_PASS")
+	channelUatPairs := strings.Split(os.Getenv("SA_CHANNEL_UAT_PAIRS"), ",")
+
+	channelUatMap := make(map[string]string, len(channelUatPairs))
+	for _, pair := range channelUatPairs {
+		parts := strings.Split(pair, ":")
+		channelUatMap[parts[0]] = parts[1]
+	}
 
 	ircClient := twitch.NewClient(nick, pass)
 	ircClient.Capabilities = append(ircClient.Capabilities, twitch.MembershipCapability)
@@ -172,7 +183,8 @@ func main() {
 		go func() {
 			channelName := message.Channel
 			log.Printf("Joined %s", channelName)
-			updateUsers(ircClient, channelName)
+			apiClient := newApiClient(channelName, channelUatMap[channelName])
+			updateUsers(ircClient, apiClient, channelName)
 		}()
 	})
 
@@ -180,16 +192,11 @@ func main() {
 	// 	ircClient.Say(message.Channel, "hey")
 	// })
 
-	channels := strings.Split(os.Getenv("SA_CHANNELS"), ",")
-	ircClient.Join(channels...)
-
-	apiClient, err = helix.NewClient(&helix.Options{
-		ClientID:        "jmaoofuyr1c4v8lqzdejzfppdj5zym",
-		UserAccessToken: os.Getenv("SA_USER_ACCESS_TOKEN"),
-	})
-	if err != nil {
-		log.Fatal("Error creating API client")
+	channels := make([]string, 0, len(channelUatMap))
+	for channel := range channelUatMap {
+		channels = append(channels, channel)
 	}
+	ircClient.Join(channels...)
 
 	err = ircClient.Connect()
 	if err != nil {

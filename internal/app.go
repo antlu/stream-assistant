@@ -55,10 +55,6 @@ func updateUsersFile(channelName string, userNames []string) {
 		users = append(users, user{userName, timeNow})
 	}
 
-	slices.SortFunc(users, func(a, b user) int {
-		return a.LastSeen.Compare(b.LastSeen)
-	})
-
 	if _, err = f.Seek(0, 0); err != nil {
 		log.Fatal(err)
 	}

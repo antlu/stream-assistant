@@ -40,7 +40,7 @@ func main() {
 		go func() {
 			channelName := message.Channel
 			log.Printf("Joined %s", channelName)
-			apiClient := internal.NewApiClient(channelName, channels[channelName].Name)
+			apiClient := internal.NewApiClient(channelName, channels[channelName].UAT)
 
 			for {
 				time.Sleep(5 * time.Minute)

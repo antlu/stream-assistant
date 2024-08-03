@@ -23,7 +23,7 @@ func (h handler) OnClose(conn *gws.Conn, err error) {
 }
 
 func (h handler) OnPing(conn *gws.Conn, payload []byte) {
-	log.Print("Got ping")
+	// log.Print("Got ping")
 	conn.WritePong(payload)
 }
 
@@ -33,19 +33,30 @@ func (h handler) OnPong(conn *gws.Conn, payload []byte) {
 func (h handler) OnMessage(conn *gws.Conn, message *gws.Message) {
 	msg := incomingMessage{}
 	json.Unmarshal(message.Data.Bytes(), &msg)
-	log.Print(msg)
 
 	switch msg.Metadata.MessageType {
 	case "session_welcome":
 		createSub := createSubRequester(h.Client, msg.Payload.Session.ID)
 		for _, channel := range h.channels {
-			createSub(channel.ID, helix.EventSubTypeStreamOnline)
-			createSub(channel.ID, helix.EventSubTypeStreamOffline)
+			go func() {
+				createSub(channel.ID, helix.EventSubTypeStreamOnline)
+				createSub(channel.ID, helix.EventSubTypeStreamOffline)
+			}()
 		}
 	case "session_keepalive":
+		// log.Print("Keepalive message")
 	case "notification":
+		switch msg.Payload.Subscription.Type {
+		case helix.EventSubTypeStreamOnline:
+			h.channels[msg.Payload.Event.BroadcasterUserLogin].IsLive = true
+		case helix.EventSubTypeStreamOffline:
+			h.channels[msg.Payload.Event.BroadcasterUserLogin].IsLive = false
+		}
+		log.Print(h.channels)
 	case "session_reconnect":
+		log.Print("Reconnect message")
 	case "revocation":
+		log.Print("Revocation message")
 	default:
 		log.Printf("Unknown message type: %s", msg.Metadata.MessageType)
 	}
@@ -75,7 +86,7 @@ func StartTwitchWSCommunication(apiClient *helix.Client, channels channelsDict) 
 		log.Fatal(err)
 	}
 
-	conn.ReadLoop()
+	go conn.ReadLoop()
 }
 
 type incomingMessage struct {

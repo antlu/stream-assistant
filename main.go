@@ -4,7 +4,9 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/nicklaw5/helix/v2"
 	"github.com/gempir/go-twitch-irc/v4"
 	"github.com/joho/godotenv"
 
@@ -21,11 +23,15 @@ func main() {
 	pass := os.Getenv("SA_PASS")
 	channelUatPairs := strings.Split(os.Getenv("SA_CHANNEL_UAT_PAIRS"), ",")
 
-	channelUatMap := make(map[string]string, len(channelUatPairs))
-	for _, pair := range channelUatPairs {
-		parts := strings.Split(pair, ":")
-		channelUatMap[parts[0]] = parts[1]
+	apiClient, err := helix.NewClient(&helix.Options{
+		ClientID:        "jmaoofuyr1c4v8lqzdejzfppdj5zym",
+		UserAccessToken: os.Getenv("SA_USER_ACCESS_TOKEN"),
+	})
+	if err != nil {
+		log.Fatal("Error creating API client")
 	}
+
+	channelNames, channels := internal.PrepareChannels(channelUatPairs, apiClient)
 
 	ircClient := twitch.NewClient(nick, pass)
 	ircClient.Capabilities = append(ircClient.Capabilities, twitch.MembershipCapability)
@@ -34,8 +40,14 @@ func main() {
 		go func() {
 			channelName := message.Channel
 			log.Printf("Joined %s", channelName)
-			apiClient := internal.NewApiClient(channelName, channelUatMap[channelName])
-			internal.UpdateUsers(ircClient, apiClient, channelName)
+			apiClient := internal.NewApiClient(channelName, channels[channelName].Name)
+
+			for {
+				time.Sleep(5 * time.Minute)
+				if channels[channelName].IsLive {
+					internal.UpdateUsers(ircClient, apiClient, channelName)
+				}
+			}
 		}()
 	})
 
@@ -43,11 +55,9 @@ func main() {
 	// 	ircClient.Say(message.Channel, "hey")
 	// })
 
-	channels := make([]string, 0, len(channelUatMap))
-	for channel := range channelUatMap {
-		channels = append(channels, channel)
-	}
-	ircClient.Join(channels...)
+	ircClient.Join(channelNames...)
+
+	internal.StartTwitchWSCommunication(apiClient, channels)
 
 	err = ircClient.Connect()
 	if err != nil {

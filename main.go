@@ -31,7 +31,7 @@ func main() {
 		log.Fatal("Error creating API client")
 	}
 
-	channelNames, channels := internal.PrepareChannels(channelUatPairs, apiClient)
+	channels := internal.PrepareChannels(channelUatPairs, apiClient)
 
 	ircClient := twitch.NewClient(nick, pass)
 	ircClient.Capabilities = append(ircClient.Capabilities, twitch.MembershipCapability)
@@ -40,11 +40,11 @@ func main() {
 		go func() {
 			channelName := message.Channel
 			log.Printf("Joined %s", channelName)
-			apiClient := internal.NewApiClient(channelName, channels[channelName].UAT)
+			apiClient := internal.NewApiClient(channelName, channels.Dict[channelName].UAT)
 
 			for {
 				time.Sleep(5 * time.Minute)
-				if channels[channelName].IsLive {
+				if channels.Dict[channelName].IsLive {
 					internal.UpdateUsers(ircClient, apiClient, channelName)
 				}
 			}
@@ -55,7 +55,7 @@ func main() {
 	// 	ircClient.Say(message.Channel, "hey")
 	// })
 
-	ircClient.Join(channelNames...)
+	ircClient.Join(channels.Names...)
 
 	internal.StartTwitchWSCommunication(apiClient, channels)
 

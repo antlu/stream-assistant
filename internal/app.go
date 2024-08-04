@@ -6,11 +6,12 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/nicklaw5/helix/v2"
 	"github.com/gempir/go-twitch-irc/v4"
 	"github.com/gocarina/gocsv"
+	"github.com/nicklaw5/helix/v2"
 )
 
 type user struct {
@@ -27,35 +28,43 @@ type channel struct {
 
 type channelsDict map[string]*channel
 
-func PrepareChannels(channelUatPairs []string, apiClient *helix.Client) ([]string, channelsDict) {
+type channels struct {
+	L     sync.RWMutex
+	Names []string
+	Dict  channelsDict
+}
+
+func PrepareChannels(channelUatPairs []string, apiClient *helix.Client) *channels {
 	numberOfChannels := len(channelUatPairs)
-	channels := make(channelsDict, numberOfChannels)
-	channelNames := make([]string, 0, numberOfChannels)
+	channels := &channels{
+		Names: make([]string, 0, numberOfChannels),
+		Dict:  make(channelsDict, numberOfChannels),
+	}
 	for _, pair := range channelUatPairs {
 		parts := strings.Split(pair, ":")
-		channels[parts[0]] = &channel{Name: parts[0], UAT: parts[1]}
-		channelNames = append(channelNames, parts[0])
+		channels.Dict[parts[0]] = &channel{Name: parts[0], UAT: parts[1]}
+		channels.Names = append(channels.Names, parts[0])
 	}
 
 	// Get channel IDs
-	usersResp, err := apiClient.GetUsers(&helix.UsersParams{Logins: channelNames})
+	usersResp, err := apiClient.GetUsers(&helix.UsersParams{Logins: channels.Names})
 	if err != nil {
 		log.Fatal("Error getting users info")
 	}
 	for _, user := range usersResp.Data.Users {
-		channels[user.Login].ID = user.ID
+		channels.Dict[user.Login].ID = user.ID
 	}
 
 	// Get live streams
-	streamsResp, err := apiClient.GetStreams(&helix.StreamsParams{UserLogins: channelNames})
+	streamsResp, err := apiClient.GetStreams(&helix.StreamsParams{UserLogins: channels.Names})
 	if err != nil {
 		log.Fatal("Error getting streams info")
 	}
 	for _, stream := range streamsResp.Data.Streams {
-		channels[stream.UserLogin].IsLive = true
+		channels.Dict[stream.UserLogin].IsLive = true
 	}
 
-	return channelNames, channels
+	return channels
 }
 
 func updateUsersFile(channelName string, userNames []string) {

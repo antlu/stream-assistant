@@ -11,7 +11,7 @@ import (
 
 type handler struct {
 	*helix.Client
-	channels channelsDict
+	channels *channels
 }
 
 func (h handler) OnOpen(conn *gws.Conn) {
@@ -37,7 +37,7 @@ func (h handler) OnMessage(conn *gws.Conn, message *gws.Message) {
 	switch msg.Metadata.MessageType {
 	case "session_welcome":
 		createSub := createSubRequester(h.Client, msg.Payload.Session.ID)
-		for _, channel := range h.channels {
+		for _, channel := range h.channels.Dict {
 			go func() {
 				createSub(channel.ID, helix.EventSubTypeStreamOnline)
 				createSub(channel.ID, helix.EventSubTypeStreamOffline)
@@ -46,13 +46,7 @@ func (h handler) OnMessage(conn *gws.Conn, message *gws.Message) {
 	case "session_keepalive":
 		// log.Print("Keepalive message")
 	case "notification":
-		switch msg.Payload.Subscription.Type {
-		case helix.EventSubTypeStreamOnline:
-			h.channels[msg.Payload.Event.BroadcasterUserLogin].IsLive = true
-		case helix.EventSubTypeStreamOffline:
-			h.channels[msg.Payload.Event.BroadcasterUserLogin].IsLive = false
-		}
-		log.Print(h.channels)
+		h.switchChannelLiveStatus(msg.Payload.Event.BroadcasterUserLogin, msg.Payload.Subscription.Type)
 	case "session_reconnect":
 		log.Print("Reconnect message")
 	case "revocation":
@@ -62,6 +56,24 @@ func (h handler) OnMessage(conn *gws.Conn, message *gws.Message) {
 	}
 
 	message.Close()
+}
+
+func (h handler) switchChannelLiveStatus(channelName, status string) {
+	var isLive bool
+
+	switch status {
+	case helix.EventSubTypeStreamOnline:
+		isLive = true
+	case helix.EventSubTypeStreamOffline:
+		isLive = false
+	default:
+		log.Printf("Unknown channel status: %s (%s)", status, channelName)
+		return
+	}
+
+	h.channels.L.Lock()
+	h.channels.Dict[channelName].IsLive = isLive
+	h.channels.L.Unlock()
 }
 
 func createSubRequester(client *helix.Client, sessionID string) func(string, string) {
@@ -78,7 +90,7 @@ func createSubRequester(client *helix.Client, sessionID string) func(string, str
 	}
 }
 
-func StartTwitchWSCommunication(apiClient *helix.Client, channels channelsDict) {
+func StartTwitchWSCommunication(apiClient *helix.Client, channels *channels) {
 	conn, _, err := gws.NewClient(handler{apiClient, channels}, &gws.ClientOption{
 		Addr: "wss://eventsub.wss.twitch.tv/ws",
 	})

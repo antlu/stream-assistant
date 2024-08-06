@@ -1,4 +1,4 @@
-package internal
+package app
 
 import (
 	"encoding/json"
@@ -7,11 +7,55 @@ import (
 
 	"github.com/lxzan/gws"
 	"github.com/nicklaw5/helix/v2"
+
+	"github.com/antlu/stream-assistant/internal"
 )
+
+type incomingMessage struct {
+	Metadata struct {
+		MessageID           string    `json:"message_id"`
+		MessageType         string    `json:"message_type"`
+		MessageTimestamp    time.Time `json:"message_timestamp"`
+		SubscriptionType    string    `json:"subscription_type"`
+		SubscriptionVersion string    `json:"subscription_version"`
+	} `json:"metadata"`
+	Payload struct {
+		Session struct {
+			ID                      string    `json:"id"`
+			Status                  string    `json:"status"`
+			KeepaliveTimeoutSeconds int       `json:"keepalive_timeout_seconds"`
+			ReconnectUrl            string    `json:"reconnect_url"`
+			ConnectedAt             time.Time `json:"connected_at"`
+		} `json:"session"`
+		Subscription struct {
+			ID        string `json:"id"`
+			Status    string `json:"status"`
+			Type      string `json:"type"`
+			Version   string `json:"version"`
+			Cost      int    `json:"cost"`
+			Condition struct {
+				BroadcasterUserID string `json:"broadcaster_user_id"`
+			}
+			Transport struct {
+				Method    string `json:"method"`
+				SessionID string `json:"session_id"`
+			}
+			CreatedAt time.Time `json:"created_at"`
+		} `json:"subscription"`
+		Event struct {
+			ID                   string    `json:"id"`
+			BroadcasterUserID    string    `json:"broadcaster_user_id"`
+			BroadcasterUserLogin string    `json:"broadcaster_user_login"`
+			BroadcasterUserName  string    `json:"broadcaster_user_name"`
+			Type                 string    `json:"type"`
+			StartedAt            time.Time `json:"started_at"`
+		} `json:"event"`
+	} `json:"payload"`
+}
 
 type handler struct {
 	*helix.Client
-	channels *channels
+	channels *structs.Channels
 }
 
 func (h handler) OnOpen(conn *gws.Conn) {
@@ -90,7 +134,7 @@ func createSubRequester(client *helix.Client, sessionID string) func(string, str
 	}
 }
 
-func StartTwitchWSCommunication(apiClient *helix.Client, channels *channels) {
+func StartTwitchWSCommunication(apiClient *helix.Client, channels *structs.Channels) {
 	conn, _, err := gws.NewClient(handler{apiClient, channels}, &gws.ClientOption{
 		Addr: "wss://eventsub.wss.twitch.tv/ws",
 	})
@@ -99,46 +143,4 @@ func StartTwitchWSCommunication(apiClient *helix.Client, channels *channels) {
 	}
 
 	go conn.ReadLoop()
-}
-
-type incomingMessage struct {
-	Metadata struct {
-		MessageID           string    `json:"message_id"`
-		MessageType         string    `json:"message_type"`
-		MessageTimestamp    time.Time `json:"message_timestamp"`
-		SubscriptionType    string    `json:"subscription_type"`
-		SubscriptionVersion string    `json:"subscription_version"`
-	} `json:"metadata"`
-	Payload struct {
-		Session struct {
-			ID                      string    `json:"id"`
-			Status                  string    `json:"status"`
-			KeepaliveTimeoutSeconds int       `json:"keepalive_timeout_seconds"`
-			ReconnectUrl            string    `json:"reconnect_url"`
-			ConnectedAt             time.Time `json:"connected_at"`
-		} `json:"session"`
-		Subscription struct {
-			ID        string `json:"id"`
-			Status    string `json:"status"`
-			Type      string `json:"type"`
-			Version   string `json:"version"`
-			Cost      int    `json:"cost"`
-			Condition struct {
-				BroadcasterUserID string `json:"broadcaster_user_id"`
-			}
-			Transport struct {
-				Method    string `json:"method"`
-				SessionID string `json:"session_id"`
-			}
-			CreatedAt time.Time `json:"created_at"`
-		} `json:"subscription"`
-		Event struct {
-			ID                   string    `json:"id"`
-			BroadcasterUserID    string    `json:"broadcaster_user_id"`
-			BroadcasterUserLogin string    `json:"broadcaster_user_login"`
-			BroadcasterUserName  string    `json:"broadcaster_user_name"`
-			Type                 string    `json:"type"`
-			StartedAt            time.Time `json:"started_at"`
-		} `json:"event"`
-	} `json:"payload"`
 }

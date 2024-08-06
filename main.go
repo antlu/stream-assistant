@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/nicklaw5/helix/v2"
-	"github.com/gempir/go-twitch-irc/v4"
+	twitchIRC "github.com/gempir/go-twitch-irc/v4"
 	"github.com/joho/godotenv"
 
-	"github.com/antlu/stream-assistant/internal"
+	"github.com/antlu/stream-assistant/internal/twitch"
+	"github.com/antlu/stream-assistant/internal/app"
 )
 
 func main() {
@@ -31,33 +32,34 @@ func main() {
 		log.Fatal("Error creating API client")
 	}
 
-	channels := internal.PrepareChannels(channelUatPairs, apiClient)
+	channels := app.PrepareChannels(channelUatPairs, apiClient)
 
-	ircClient := twitch.NewClient(nick, pass)
-	ircClient.Capabilities = append(ircClient.Capabilities, twitch.MembershipCapability)
+	ircClient := twitchIRC.NewClient(nick, pass)
+	ircClient.Capabilities = append(ircClient.Capabilities, twitchIRC.MembershipCapability)
 
-	ircClient.OnSelfJoinMessage(func(message twitch.UserJoinMessage) {
+	ircClient.OnSelfJoinMessage(func(message twitchIRC.UserJoinMessage) {
 		go func() {
 			channelName := message.Channel
 			log.Printf("Joined %s", channelName)
-			apiClient := internal.NewApiClient(channelName, channels.Dict[channelName].UAT)
+			apiClient := twitch.NewApiClient(channelName, channels.Dict[channelName].UAT)
 
 			for {
 				time.Sleep(5 * time.Minute)
 				if channels.Dict[channelName].IsLive {
-					internal.UpdateUsers(ircClient, apiClient, channelName)
+					app.UpdateUsers(ircClient, apiClient, channelName)
 				}
 			}
 		}()
 	})
 
-	// ircClient.OnPrivateMessage(func(message twitch.PrivateMessage) {
+	// ircClient.OnPrivateMessage(func(message twitchIRC.PrivateMessage) {
 	// 	ircClient.Say(message.Channel, "hey")
+	// log.Printf("%s: %s", message.User.Name, message.Message)
 	// })
 
 	ircClient.Join(channels.Names...)
 
-	internal.StartTwitchWSCommunication(apiClient, channels)
+	app.StartTwitchWSCommunication(apiClient, channels)
 
 	err = ircClient.Connect()
 	if err != nil {

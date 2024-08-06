@@ -1,4 +1,4 @@
-package internal
+package twitch
 
 import (
 	"errors"
@@ -8,12 +8,12 @@ import (
 	"github.com/nicklaw5/helix/v2"
 )
 
-type apiClient struct {
+type ApiClient struct {
 	*helix.Client
 	channel string
 }
 
-func NewApiClient(channel, uat string) *apiClient {
+func NewApiClient(channel, uat string) *ApiClient {
 	client, err := helix.NewClient(&helix.Options{
 		ClientID:        "jmaoofuyr1c4v8lqzdejzfppdj5zym",
 		UserAccessToken: uat,
@@ -22,10 +22,10 @@ func NewApiClient(channel, uat string) *apiClient {
 		log.Fatalf("Error creating API client for %s", channel)
 	}
 
-	return &apiClient{client, channel}
+	return &ApiClient{client, channel}
 }
 
-func (ac apiClient) getUsersInfo(names ...string) ([]helix.User, error) {
+func (ac ApiClient) getUsersInfo(names ...string) ([]helix.User, error) {
 	resp, err := ac.GetUsers(&helix.UsersParams{Logins: names})
 
 	if err != nil {
@@ -36,7 +36,7 @@ func (ac apiClient) getUsersInfo(names ...string) ([]helix.User, error) {
 	return resp.Data.Users, nil
 }
 
-func (ac apiClient) getVipNames(channelName string) ([]string, error) {
+func (ac ApiClient) GetVipNames(channelName string) ([]string, error) {
 	usersInfo, err := ac.getUsersInfo(channelName)
 	if err != nil {
 		return nil, err

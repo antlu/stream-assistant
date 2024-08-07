@@ -2,6 +2,7 @@ package app
 
 import (
 	"log"
+	"regexp"
 	"strings"
 
 	"github.com/nicklaw5/helix/v2"
@@ -9,13 +10,16 @@ import (
 	"github.com/antlu/stream-assistant/internal"
 )
 
-func PrepareChannels(channelUatPairs []string, apiClient *helix.Client) *structs.Channels {
-	numberOfChannels := len(channelUatPairs)
+func PrepareChannels(channelUatPairs string, apiClient *helix.Client) *structs.Channels {
+	validateChannelUatPairs(channelUatPairs)
+
+	splitChannelUatPairs := strings.Split(channelUatPairs, ",")
+	numberOfChannels := len(splitChannelUatPairs)
 	channels := &structs.Channels{
 		Names: make([]string, 0, numberOfChannels),
 		Dict:  make(structs.ChannelsDict, numberOfChannels),
 	}
-	for _, pair := range channelUatPairs {
+	for _, pair := range splitChannelUatPairs {
 		parts := strings.Split(pair, ":")
 		channels.Dict[parts[0]] = &structs.Channel{Name: parts[0], UAT: parts[1]}
 		channels.Names = append(channels.Names, parts[0])
@@ -40,4 +44,17 @@ func PrepareChannels(channelUatPairs []string, apiClient *helix.Client) *structs
 	}
 
 	return channels
+}
+
+func validateChannelUatPairs(channelUatPairs string) {
+	matched, err := regexp.MatchString(`^\w+:\w+(?:,(?:\w+:\w+))*?$`, channelUatPairs)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if matched {
+		return
+	}
+
+	log.Fatal("Invalid channel:user_access_token pairs")
 }

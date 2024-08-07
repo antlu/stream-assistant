@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/nicklaw5/helix/v2"
@@ -22,7 +21,7 @@ func main() {
 
 	nick := os.Getenv("SA_NICK")
 	pass := os.Getenv("SA_PASS")
-	channelUatPairs := strings.Split(os.Getenv("SA_CHANNEL_UAT_PAIRS"), ",")
+	channelUatPairs := os.Getenv("SA_CHANNEL_UAT_PAIRS")
 
 	apiClient, err := helix.NewClient(&helix.Options{
 		ClientID:        "jmaoofuyr1c4v8lqzdejzfppdj5zym",

@@ -14,7 +14,7 @@ import (
 	"github.com/antlu/stream-assistant/internal/twitch"
 )
 
-func updateUsersFile(channelName string, userNames []string) {
+func UpdateUsersFile(channelName string, userNames []string) {
 	dirPath := filepath.Join("data", channelName)
 
 	err := os.MkdirAll(dirPath, os.ModePerm)
@@ -62,17 +62,15 @@ func updateUsersFile(channelName string, userNames []string) {
 	log.Printf("Updated user list for %s", channelName)
 }
 
-func UpdateUsers(ircClient *twitchIRC.Client, apiClient *twitch.ApiClient, channelName string) {
+func GetOnlineVips(ircClient *twitchIRC.Client, apiClient *twitch.ApiClient, channelName string) ([]string, error) {
 	userNames, err := ircClient.Userlist(channelName)
 	if err != nil {
-		log.Print(err)
-		return
+		return nil, err
 	}
 
 	vipNames, err := apiClient.GetVipNames(channelName)
 	if err != nil {
-		log.Print(err)
-		return
+		return nil, err
 	}
 
 	presentVipNames := make([]string, 0, len(vipNames))
@@ -82,5 +80,5 @@ func UpdateUsers(ircClient *twitchIRC.Client, apiClient *twitch.ApiClient, chann
 		}
 	}
 
-	updateUsersFile(channelName, presentVipNames)
+	return presentVipNames, nil
 }

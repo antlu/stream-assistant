@@ -45,7 +45,12 @@ func main() {
 			for {
 				time.Sleep(5 * time.Minute)
 				if channels.Dict[channelName].IsLive {
-					app.UpdateUsers(ircClient, apiClient, channelName)
+					vips, err := app.GetOnlineVips(ircClient, apiClient, channelName)
+					if err != nil {
+						log.Print(err)
+					} else {
+						app.UpdateUsersFile(channelName, vips)
+					}
 				}
 			}
 		}()

@@ -33,9 +33,9 @@ func UpdateUsersFile(channelName string, userNames []string) {
 		log.Fatal(err)
 	}
 
-	users := []structs.User{}
+	users := []types.User{}
 	if fi.Size() != 0 {
-		usersFromFile := []structs.User{}
+		usersFromFile := []types.User{}
 		if err = gocsv.UnmarshalFile(f, &usersFromFile); err != nil {
 			log.Fatal(err)
 		}
@@ -50,7 +50,7 @@ func UpdateUsersFile(channelName string, userNames []string) {
 
 	timeNow := time.Now()
 	for _, userName := range userNames {
-		users = append(users, structs.User{Name: userName, LastSeen: timeNow})
+		users = append(users, types.User{Name: userName, LastSeen: timeNow})
 	}
 
 	if _, err = f.Seek(0, 0); err != nil {

@@ -2,15 +2,19 @@ package main
 
 import (
 	"log"
+	"math/rand"
+	"net/http"
 	"os"
+	"slices"
+	"strings"
 	"time"
 
-	"github.com/nicklaw5/helix/v2"
 	twitchIRC "github.com/gempir/go-twitch-irc/v4"
 	"github.com/joho/godotenv"
+	"github.com/nicklaw5/helix/v2"
 
-	"github.com/antlu/stream-assistant/internal/twitch"
 	"github.com/antlu/stream-assistant/internal/app"
+	"github.com/antlu/stream-assistant/internal/twitch"
 )
 
 func main() {
@@ -33,6 +37,8 @@ func main() {
 
 	channels := app.PrepareChannels(channelUatPairs, apiClient)
 
+	apiClientForChannel := make(map[string]*twitch.ApiClient)
+
 	ircClient := twitchIRC.NewClient(nick, pass)
 	ircClient.Capabilities = append(ircClient.Capabilities, twitchIRC.MembershipCapability)
 
@@ -41,6 +47,7 @@ func main() {
 			channelName := message.Channel
 			log.Printf("Joined %s", channelName)
 			apiClient := twitch.NewApiClient(channelName, channels.Dict[channelName].UAT)
+			apiClientForChannel[channelName] = apiClient
 
 			for {
 				time.Sleep(5 * time.Minute)
@@ -56,10 +63,83 @@ func main() {
 		}()
 	})
 
-	// ircClient.OnPrivateMessage(func(message twitchIRC.PrivateMessage) {
+	ircClient.OnPrivateMessage(func(message twitchIRC.PrivateMessage) {
 	// 	ircClient.Say(message.Channel, "hey")
 	// log.Printf("%s: %s", message.User.Name, message.Message)
-	// })
+		channelName := message.Channel
+		channel := channels.Dict[channelName]
+		msgAuthorName := message.User.Name
+		prefix := "!raffle vip"
+		if strings.HasPrefix(message.Message, prefix) {
+			if msgAuthorName != channelName {
+				return
+			}
+
+			channel.Raffle.EnrollMsg = strings.TrimSpace(strings.TrimPrefix(message.Message, prefix))
+			channel.Raffle.IsActive = true
+
+			resp, err := apiClientForChannel[channelName].GetModerators(&helix.GetModeratorsParams{BroadcasterID: channel.ID})
+			if err != nil || resp.StatusCode != http.StatusOK {
+				log.Print("Error getting moderators")
+				return
+			}
+
+			for _, moderator := range resp.Data.Moderators {
+				channel.Raffle.Ineligible[moderator.UserLogin] = true
+			}
+			channel.Raffle.Ineligible[msgAuthorName] = true
+
+			time.AfterFunc(30 * time.Second, func() {
+				channel.Raffle.IsActive = false
+
+				names := make([]string, 0, len(channel.Raffle.Participants))
+				for name := range channel.Raffle.Participants {
+					names = append(names, name)
+				}
+
+				rand.Shuffle(len(names), func(i, j int) {
+					names[i], names[j] = names[j], names[i]
+				})
+
+				vipNames, err := apiClientForChannel[channelName].GetVipNames(channelName)
+				if err != nil {
+					log.Print(err)
+					return
+				}
+
+				unvipTarget := ""
+				winner := ""
+				for _, name := range names {
+					if !slices.Contains(vipNames, name) {
+						winner = name
+						break
+					}
+					if unvipTarget == "" {
+						unvipTarget = name
+					}
+				}
+
+				log.Printf("%+v", channel.Raffle) // TODO: remove
+				log.Printf("%s > %s", unvipTarget, winner) // TODO: remove
+
+				if unvipTarget == "" {
+					// read first from file
+
+				}
+			})
+
+			return
+		}
+
+		if channel.Raffle.IsActive && message.Message == channel.Raffle.EnrollMsg {
+			if channel.Raffle.Ineligible[msgAuthorName] {
+				return
+			}
+
+			channel.Raffle.Participants[msgAuthorName] = true
+			log.Printf("%+v", channel.Raffle) // TODO: remove
+		}
+	})
 
 	ircClient.Join(channels.Names...)
 

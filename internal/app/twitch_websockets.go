@@ -55,7 +55,7 @@ type incomingMessage struct {
 
 type handler struct {
 	*helix.Client
-	channels *structs.Channels
+	channels *types.Channels
 }
 
 func (h handler) OnOpen(conn *gws.Conn) {
@@ -115,9 +115,7 @@ func (h handler) switchChannelLiveStatus(channelName, status string) {
 		return
 	}
 
-	h.channels.L.Lock()
 	h.channels.Dict[channelName].IsLive = isLive
-	h.channels.L.Unlock()
 }
 
 func createSubRequester(client *helix.Client, sessionID string) func(string, string) {
@@ -134,7 +132,7 @@ func createSubRequester(client *helix.Client, sessionID string) func(string, str
 	}
 }
 
-func StartTwitchWSCommunication(apiClient *helix.Client, channels *structs.Channels) {
+func StartTwitchWSCommunication(apiClient *helix.Client, channels *types.Channels) {
 	conn, _, err := gws.NewClient(handler{apiClient, channels}, &gws.ClientOption{
 		Addr: "wss://eventsub.wss.twitch.tv/ws",
 	})

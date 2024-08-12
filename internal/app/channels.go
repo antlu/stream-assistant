@@ -10,18 +10,24 @@ import (
 	"github.com/antlu/stream-assistant/internal"
 )
 
-func PrepareChannels(channelUatPairs string, apiClient *helix.Client) *structs.Channels {
+func PrepareChannels(channelUatPairs string, apiClient *helix.Client) *types.Channels {
 	validateChannelUatPairs(channelUatPairs)
 
 	splitChannelUatPairs := strings.Split(channelUatPairs, ",")
 	numberOfChannels := len(splitChannelUatPairs)
-	channels := &structs.Channels{
+	channels := &types.Channels{
 		Names: make([]string, 0, numberOfChannels),
-		Dict:  make(structs.ChannelsDict, numberOfChannels),
+		Dict:  make(types.ChannelsDict, numberOfChannels),
 	}
 	for _, pair := range splitChannelUatPairs {
 		parts := strings.Split(pair, ":")
-		channels.Dict[parts[0]] = &structs.Channel{Name: parts[0], UAT: parts[1]}
+		channels.Dict[parts[0]] = &types.Channel{
+			Name: parts[0], UAT: parts[1],
+			Raffle: types.Raffle{
+				Participants: make(types.StringSet),
+				Ineligible:   make(types.StringSet),
+			},
+		}
 		channels.Names = append(channels.Names, parts[0])
 	}
 

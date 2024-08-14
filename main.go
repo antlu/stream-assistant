@@ -48,12 +48,7 @@ func main() {
 			log.Printf("Joined %s", channelName)
 			apiClient := twitch.NewApiClient(channelName, channels.Dict[channelName].UAT)
 			apiClientForChannel[channelName] = apiClient
-
-			vipNames, err := apiClient.GetVipNames(channelName)
-			if err != nil {
-				log.Fatal(err)
-			}
-			app.WriteDataToUsersFileIfNotExists(channelName, vipNames)
+			app.WriteDataToUsersFileIfNotExists(channelName, apiClient.GetVipNames)
 
 			for {
 				time.Sleep(5 * time.Minute)

@@ -62,12 +62,17 @@ func convertUsernamesToUsers(userNames []string, users *[]types.User) {
 	}
 }
 
-func WriteDataToUsersFileIfNotExists(channelName string, userNames []string) {
+func WriteDataToUsersFileIfNotExists(channelName string, callback func(string) ([]string, error)) {
 	f, closer, err := createUsersFileIfNotExists(channelName)
 	if err != nil {
 		return
 	}
 	defer closer()
+
+	userNames, err := callback(channelName)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	users := make([]types.User, 0, len(userNames))
 	convertUsernamesToUsers(userNames, &users)

@@ -119,13 +119,13 @@ func main() {
 					}
 				}
 
-				log.Printf("%+v", channel.Raffle) // TODO: remove
-				log.Printf("%s > %s", unvipTarget, winner) // TODO: remove
-
 				if unvipTarget == "" {
-					// read first from file
-
+					userFromFile := app.GetFirstUserFromFile(channelName)
+					unvipTarget = userFromFile
 				}
+
+				log.Printf("%+v", channel.Raffle) // TODO: remove
+				log.Printf("unvip: %s, vip: %s", unvipTarget, winner) // TODO: remove
 			})
 
 			return

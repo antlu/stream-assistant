@@ -1,10 +1,12 @@
 package app
 
 import (
+	"bufio"
 	"log"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	twitchIRC "github.com/gempir/go-twitch-irc/v4"
@@ -13,6 +15,21 @@ import (
 	"github.com/antlu/stream-assistant/internal"
 	"github.com/antlu/stream-assistant/internal/twitch"
 )
+
+func GetFirstUserFromFile(channelName string) string {
+	f, err := os.Open(filepath.Join("data", channelName, "users.csv"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Scan()
+	scanner.Scan()
+	userName := strings.Split(scanner.Text(), ",")[0]
+
+	return userName
+}
 
 func UpdateUsersFile(channelName string, userNames []string) {
 	dirPath := filepath.Join("data", channelName)
@@ -59,7 +76,7 @@ func UpdateUsersFile(channelName string, userNames []string) {
 	if err = gocsv.MarshalFile(&users, f); err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Updated user list for %s", channelName)
+	log.Printf("Updated users list for %s", channelName)
 }
 
 func GetOnlineVips(ircClient *twitchIRC.Client, apiClient *twitch.ApiClient, channelName string) ([]string, error) {

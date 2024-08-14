@@ -49,14 +49,20 @@ func main() {
 			apiClient := twitch.NewApiClient(channelName, channels.Dict[channelName].UAT)
 			apiClientForChannel[channelName] = apiClient
 
+			vipNames, err := apiClient.GetVipNames(channelName)
+			if err != nil {
+				log.Fatal(err)
+			}
+			app.WriteDataToUsersFileIfNotExists(channelName, vipNames)
+
 			for {
 				time.Sleep(5 * time.Minute)
 				if channels.Dict[channelName].IsLive {
-					vips, err := app.GetOnlineVips(ircClient, apiClient, channelName)
+					onlineVips, err := app.GetOnlineVips(ircClient, apiClient, channelName)
 					if err != nil {
 						log.Print(err)
 					} else {
-						app.UpdateUsersFile(channelName, vips)
+						app.UpdateUsersFile(channelName, onlineVips)
 					}
 				}
 			}

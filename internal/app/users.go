@@ -63,11 +63,11 @@ func convertUsernamesToUsers(userNames []string, users *[]types.User) {
 }
 
 func WriteDataToUsersFileIfNotExists(channelName string, callback func(string) ([]string, error)) {
-	f, closer, err := createUsersFileIfNotExists(channelName)
+	f, close, err := createUsersFileIfNotExists(channelName)
 	if err != nil {
 		return
 	}
-	defer closer()
+	defer close()
 
 	userNames, err := callback(channelName)
 	if err != nil {

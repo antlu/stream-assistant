@@ -144,7 +144,7 @@ func main() {
 
 	ircClient.Join(channels.Names...)
 
-	app.StartTwitchWSCommunication(apiClient, channels)
+	app.StartTwitchWSCommunication(apiClient, channels, app.ReconnParams{})
 
 	err = ircClient.Connect()
 	if err != nil {

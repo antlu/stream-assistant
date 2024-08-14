@@ -53,9 +53,15 @@ type incomingMessage struct {
 	} `json:"payload"`
 }
 
+type ReconnParams struct {
+	ReconnectUrl string
+	closeOldConn func()
+}
+
 type handler struct {
 	*helix.Client
-	channels *types.Channels
+	channels     *types.Channels
+	closeOldConn func()
 }
 
 func (h handler) OnOpen(conn *gws.Conn) {
@@ -80,6 +86,13 @@ func (h handler) OnMessage(conn *gws.Conn, message *gws.Message) {
 
 	switch msg.Metadata.MessageType {
 	case "session_welcome":
+		if h.closeOldConn != nil {
+			h.closeOldConn()
+			log.Print("Old WebSocket connection closed")
+			h.closeOldConn = nil
+			return
+		}
+
 		createSub := createSubRequester(h.Client, msg.Payload.Session.ID)
 		for _, channel := range h.channels.Dict {
 			go func() {
@@ -92,7 +105,12 @@ func (h handler) OnMessage(conn *gws.Conn, message *gws.Message) {
 	case "notification":
 		h.switchChannelLiveStatus(msg.Payload.Event.BroadcasterUserLogin, msg.Payload.Subscription.Type)
 	case "session_reconnect":
-		log.Print("Reconnect message")
+		log.Print("Reconnection requested")
+		StartTwitchWSCommunication(
+			h.Client,
+			h.channels,
+			ReconnParams{msg.Payload.Session.ReconnectUrl, func() { conn.WriteClose(1000, nil) }},
+		)
 	case "revocation":
 		log.Print("Revocation message")
 	default:
@@ -132,10 +150,16 @@ func createSubRequester(client *helix.Client, sessionID string) func(string, str
 	}
 }
 
-func StartTwitchWSCommunication(apiClient *helix.Client, channels *types.Channels) {
-	conn, _, err := gws.NewClient(handler{apiClient, channels}, &gws.ClientOption{
-		Addr: "wss://eventsub.wss.twitch.tv/ws",
-	})
+func StartTwitchWSCommunication(apiClient *helix.Client, channels *types.Channels, params ReconnParams) {
+	serverAddr := "wss://eventsub.wss.twitch.tv/ws"
+	if params.ReconnectUrl != "" {
+		serverAddr = params.ReconnectUrl
+	}
+
+	conn, _, err := gws.NewClient(
+		&handler{Client: apiClient, channels: channels, closeOldConn: params.closeOldConn},
+		&gws.ClientOption{Addr: serverAddr},
+	)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -88,7 +88,6 @@ func (h handler) OnMessage(conn *gws.Conn, message *gws.Message) {
 	case "session_welcome":
 		if h.closeOldConn != nil {
 			h.closeOldConn()
-			log.Print("Old WebSocket connection closed")
 			h.closeOldConn = nil
 			return
 		}
@@ -105,11 +104,13 @@ func (h handler) OnMessage(conn *gws.Conn, message *gws.Message) {
 	case "notification":
 		h.switchChannelLiveStatus(msg.Payload.Event.BroadcasterUserLogin, msg.Payload.Subscription.Type)
 	case "session_reconnect":
-		log.Print("Reconnection requested")
+		// log.Print("Reconnection requested")
 		StartTwitchWSCommunication(
 			h.Client,
 			h.channels,
-			ReconnParams{msg.Payload.Session.ReconnectUrl, func() { conn.WriteClose(1000, nil) }},
+			ReconnParams{msg.Payload.Session.ReconnectUrl, func() {
+				conn.WriteClose(1000, []byte("Old connection"))
+			}},
 		)
 	case "revocation":
 		log.Print("Revocation message")

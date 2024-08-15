@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"maps"
 	"math/rand"
 	"net/http"
 	"os"
@@ -91,14 +92,12 @@ func main() {
 				channel.Raffle.Ineligible[moderator.UserID] = moderator.UserName
 			}
 			channel.Raffle.Ineligible[msgAuthorID] = msgAuthorName
+			ircClient.Say(channelName, fmt.Sprintf("Розыгрыш начался! Для участия отправь в чат %s", channel.Raffle.EnrollMsg))
 
 			time.AfterFunc(30*time.Second, func() {
 				channel.Raffle.IsActive = false
 
-				participantIDs := make([]string, 0, len(channel.Raffle.Participants))
-				for participantID := range channel.Raffle.Participants {
-					participantIDs = append(participantIDs, participantID)
-				}
+				participantIDs := slices.Collect(maps.Keys(channel.Raffle.Participants))
 
 				rand.Shuffle(len(participantIDs), func(i, j int) {
 					participantIDs[i], participantIDs[j] = participantIDs[j], participantIDs[i]
@@ -147,7 +146,7 @@ func main() {
 							log.Print(err)
 						}
 
-						log.Printf("Unvipped %s", channel.Raffle.Participants[unvipTargetID])
+						log.Printf("Demoted %s", channel.Raffle.Participants[unvipTargetID])
 					}
 
 					resp, err := apiClient.AddChannelVip(&helix.AddChannelVipParams{
@@ -158,10 +157,11 @@ func main() {
 						log.Print(err)
 					}
 					if resp.StatusCode == http.StatusNoContent {
-						log.Printf("Vipped %s", channel.Raffle.Participants[winnerID])
+						log.Printf("Promoted %s", channel.Raffle.Participants[winnerID])
 						break
 					}
 					if resp.StatusCode == http.StatusConflict {
+						log.Print("No free slots. Will search who to demote")
 						userFromFile := app.GetFirstUserFromFile(channelName)
 						users, err := apiClient.GetUsersInfo(userFromFile)
 						if err != nil {
@@ -177,7 +177,7 @@ func main() {
 					unvipMsg = fmt.Sprintf("%s потерял випку. ", channel.Raffle.Participants[unvipTargetID])
 				}
 				resultMsg := fmt.Sprintf("%sНовый вип — %s!", unvipMsg, channel.Raffle.Participants[winnerID])
-				ircClient.Say(message.Channel, resultMsg)
+				ircClient.Say(channelName, resultMsg)
 			})
 
 			return

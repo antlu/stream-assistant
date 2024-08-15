@@ -1,6 +1,6 @@
 module github.com/antlu/stream-assistant
 
-go 1.22.0
+go 1.23.0
 
 require (
 	github.com/gempir/go-twitch-irc/v4 v4.0.0

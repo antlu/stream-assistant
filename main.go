@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
@@ -48,7 +49,7 @@ func main() {
 			log.Printf("Joined %s", channelName)
 			apiClient := twitch.NewApiClient(channelName, channels.Dict[channelName].UAT)
 			apiClientForChannel[channelName] = apiClient
-			app.WriteDataToUsersFileIfNotExists(channelName, apiClient.GetVipNames)
+			app.WriteDataToUsersFileIfNotExists(channelName, apiClient.GetVips)
 
 			for {
 				time.Sleep(5 * time.Minute)
@@ -65,80 +66,130 @@ func main() {
 	})
 
 	ircClient.OnPrivateMessage(func(message twitchIRC.PrivateMessage) {
-	// 	ircClient.Say(message.Channel, "hey")
-	// log.Printf("%s: %s", message.User.Name, message.Message)
 		channelName := message.Channel
 		channel := channels.Dict[channelName]
-		msgAuthorName := message.User.Name
+		apiClient := apiClientForChannel[channelName]
+		msgAuthorName := message.User.DisplayName
+		msgAuthorID := message.User.ID
 		prefix := "!raffle vip"
+
 		if strings.HasPrefix(message.Message, prefix) {
-			if msgAuthorName != channelName {
+			if message.User.Name != channelName {
 				return
 			}
 
 			channel.Raffle.EnrollMsg = strings.TrimSpace(strings.TrimPrefix(message.Message, prefix))
 			channel.Raffle.IsActive = true
 
-			resp, err := apiClientForChannel[channelName].GetModerators(&helix.GetModeratorsParams{BroadcasterID: channel.ID})
+			resp, err := apiClient.GetModerators(&helix.GetModeratorsParams{BroadcasterID: channel.ID})
 			if err != nil || resp.StatusCode != http.StatusOK {
 				log.Print("Error getting moderators")
 				return
 			}
 
 			for _, moderator := range resp.Data.Moderators {
-				channel.Raffle.Ineligible[moderator.UserLogin] = true
+				channel.Raffle.Ineligible[moderator.UserID] = moderator.UserName
 			}
-			channel.Raffle.Ineligible[msgAuthorName] = true
+			channel.Raffle.Ineligible[msgAuthorID] = msgAuthorName
 
-			time.AfterFunc(30 * time.Second, func() {
+			time.AfterFunc(30*time.Second, func() {
 				channel.Raffle.IsActive = false
 
-				names := make([]string, 0, len(channel.Raffle.Participants))
-				for name := range channel.Raffle.Participants {
-					names = append(names, name)
+				participantIDs := make([]string, 0, len(channel.Raffle.Participants))
+				for participantID := range channel.Raffle.Participants {
+					participantIDs = append(participantIDs, participantID)
 				}
 
-				rand.Shuffle(len(names), func(i, j int) {
-					names[i], names[j] = names[j], names[i]
+				rand.Shuffle(len(participantIDs), func(i, j int) {
+					participantIDs[i], participantIDs[j] = participantIDs[j], participantIDs[i]
 				})
 
-				vipNames, err := apiClientForChannel[channelName].GetVipNames(channelName)
+				vips, err := apiClient.GetVips(channelName)
 				if err != nil {
 					log.Print(err)
 					return
 				}
 
-				unvipTarget := ""
-				winner := ""
-				for _, name := range names {
-					if !slices.Contains(vipNames, name) {
-						winner = name
+				vipIDs := make([]string, 0, len(vips))
+				for _, vip := range vips {
+					vipIDs = append(vipIDs, vip.UserID)
+				}
+
+				var (
+					unvipTargetID string
+					winnerID      string
+				)
+
+				for _, participantID := range participantIDs {
+					if !slices.Contains(vipIDs, participantID) {
+						winnerID = participantID
 						break
 					}
-					if unvipTarget == "" {
-						unvipTarget = name
+					if unvipTargetID == "" {
+						unvipTargetID = participantID
 					}
 				}
 
-				if unvipTarget == "" {
-					userFromFile := app.GetFirstUserFromFile(channelName)
-					unvipTarget = userFromFile
+				if winnerID == "" {
+					log.Print("No one won")
+					return
 				}
 
-				log.Printf("%+v", channel.Raffle) // TODO: remove
-				log.Printf("unvip: %s, vip: %s", unvipTarget, winner) // TODO: remove
+				for i := 0; i < 2; i++ {
+					log.Printf("VIPs routine: attempt %d", i+1)
+
+					if unvipTargetID != "" {
+						_, err := apiClient.RemoveChannelVip(&helix.RemoveChannelVipParams{
+							UserID:        unvipTargetID,
+							BroadcasterID: channel.ID,
+						})
+						if err != nil {
+							log.Print(err)
+						}
+
+						log.Printf("Unvipped %s", channel.Raffle.Participants[unvipTargetID])
+					}
+
+					resp, err := apiClient.AddChannelVip(&helix.AddChannelVipParams{
+						UserID:        winnerID,
+						BroadcasterID: channel.ID,
+					})
+					if err != nil {
+						log.Print(err)
+					}
+					if resp.StatusCode == http.StatusNoContent {
+						log.Printf("Vipped %s", channel.Raffle.Participants[winnerID])
+						break
+					}
+					if resp.StatusCode == http.StatusConflict {
+						userFromFile := app.GetFirstUserFromFile(channelName)
+						users, err := apiClient.GetUsersInfo(userFromFile)
+						if err != nil {
+							log.Print(err)
+						}
+
+						unvipTargetID = users[0].ID
+					}
+				}
+
+				unvipMsg := ""
+				if unvipTargetID != "" {
+					unvipMsg = fmt.Sprintf("%s потерял випку. ", channel.Raffle.Participants[unvipTargetID])
+				}
+				resultMsg := fmt.Sprintf("%sНовый вип — %s!", unvipMsg, channel.Raffle.Participants[winnerID])
+				ircClient.Say(message.Channel, resultMsg)
 			})
 
 			return
 		}
 
 		if channel.Raffle.IsActive && message.Message == channel.Raffle.EnrollMsg {
-			if channel.Raffle.Ineligible[msgAuthorName] {
+			if _, ok := channel.Raffle.Ineligible[msgAuthorID]; ok {
 				return
 			}
 
-			channel.Raffle.Participants[msgAuthorName] = true
-			log.Printf("%+v", channel.Raffle) // TODO: remove
+			channel.Raffle.Participants[msgAuthorID] = msgAuthorName
+			log.Printf("%s joined the raffle", msgAuthorName)
 		}
 	})
 

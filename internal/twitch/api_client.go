@@ -25,7 +25,7 @@ func NewApiClient(channel, uat string) *ApiClient {
 	return &ApiClient{client, channel}
 }
 
-func (ac ApiClient) getUsersInfo(names ...string) ([]helix.User, error) {
+func (ac ApiClient) GetUsersInfo(names ...string) ([]helix.User, error) {
 	resp, err := ac.GetUsers(&helix.UsersParams{Logins: names})
 
 	if err != nil {
@@ -36,8 +36,8 @@ func (ac ApiClient) getUsersInfo(names ...string) ([]helix.User, error) {
 	return resp.Data.Users, nil
 }
 
-func (ac ApiClient) GetVipNames(channelName string) ([]string, error) {
-	usersInfo, err := ac.getUsersInfo(channelName)
+func (ac ApiClient) GetVips(channelName string) ([]helix.ChannelVips, error) {
+	usersInfo, err := ac.GetUsersInfo(channelName)
 	if err != nil {
 		return nil, err
 	}
@@ -54,10 +54,5 @@ func (ac ApiClient) GetVipNames(channelName string) ([]string, error) {
 		return nil, err
 	}
 
-	vips := make([]string, 0, len(resp.Data.ChannelsVips))
-	for _, vip := range resp.Data.ChannelsVips {
-		vips = append(vips, vip.UserLogin)
-	}
-
-	return vips, nil
+	return resp.Data.ChannelsVips, nil
 }

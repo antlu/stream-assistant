@@ -24,8 +24,8 @@ func PrepareChannels(channelUatPairs string, apiClient *helix.Client) *types.Cha
 		channels.Dict[parts[0]] = &types.Channel{
 			Name: parts[0], UAT: parts[1],
 			Raffle: types.Raffle{
-				Participants: make(types.StringSet),
-				Ineligible:   make(types.StringSet),
+				Participants: make(types.IDNameDict),
+				Ineligible:   make(types.IDNameDict),
 			},
 		}
 		channels.Names = append(channels.Names, parts[0])

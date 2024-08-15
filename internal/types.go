@@ -10,13 +10,13 @@ type User struct {
 	LastSeen time.Time `csv:"last_seen"`
 }
 
-type StringSet map[string]bool
+type IDNameDict map[string]string
 
 type Raffle struct {
 	IsActive     bool
 	EnrollMsg    string
-	Participants StringSet
-	Ineligible   StringSet
+	Participants IDNameDict
+	Ineligible   IDNameDict
 }
 
 type Channel struct {

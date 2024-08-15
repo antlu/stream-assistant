@@ -12,6 +12,7 @@ import (
 
 	twitchIRC "github.com/gempir/go-twitch-irc/v4"
 	"github.com/gocarina/gocsv"
+	"github.com/nicklaw5/helix/v2"
 
 	"github.com/antlu/stream-assistant/internal"
 	"github.com/antlu/stream-assistant/internal/twitch"
@@ -62,16 +63,21 @@ func convertUsernamesToUsers(userNames []string, users *[]types.User) {
 	}
 }
 
-func WriteDataToUsersFileIfNotExists(channelName string, callback func(string) ([]string, error)) {
+func WriteDataToUsersFileIfNotExists(channelName string, callback func(string) ([]helix.ChannelVips, error)) {
 	f, close, err := createUsersFileIfNotExists(channelName)
 	if err != nil {
 		return
 	}
 	defer close()
 
-	userNames, err := callback(channelName)
+	usersFromResponse, err := callback(channelName)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	userNames := make([]string, 0, len(usersFromResponse))
+	for _, user := range usersFromResponse {
+		userNames = append(userNames, user.UserLogin)
 	}
 
 	users := make([]types.User, 0, len(userNames))
@@ -139,22 +145,22 @@ func UpdateUsersFile(channelName string, userNames []string) {
 }
 
 func GetOnlineVips(ircClient *twitchIRC.Client, apiClient *twitch.ApiClient, channelName string) ([]string, error) {
-	userNames, err := ircClient.Userlist(channelName)
+	userLogins, err := ircClient.Userlist(channelName)
 	if err != nil {
 		return nil, err
 	}
 
-	vipNames, err := apiClient.GetVipNames(channelName)
+	vips, err := apiClient.GetVips(channelName)
 	if err != nil {
 		return nil, err
 	}
 
-	presentVipNames := make([]string, 0, len(vipNames))
-	for _, vipName := range vipNames {
-		if slices.Contains(userNames, vipName) {
-			presentVipNames = append(presentVipNames, vipName)
+	presentVipLogins := make([]string, 0, len(vips))
+	for _, vip := range vips {
+		if slices.Contains(userLogins, vip.UserLogin) {
+			presentVipLogins = append(presentVipLogins, vip.UserLogin)
 		}
 	}
 
-	return presentVipNames, nil
+	return presentVipLogins, nil
 }

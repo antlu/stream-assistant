@@ -55,16 +55,15 @@ func createUsersFileIfNotExists(channelName string) (*os.File, func(), error) {
 	}, nil
 }
 
-func appendAbsentUsers(usersFromFile []types.User, userNames []string, users *[]types.User) {
+func appendUsersAsIs(usersFromFile []types.User, userNames []string, users *[]types.User) {
 	for _, user := range usersFromFile {
 		if slices.Contains(userNames, user.Name) {
-			continue
+			*users = append(*users, user)
 		}
-		*users = append(*users, user)
 	}
 }
 
-func appendPresentUsers(userNames []string, users *[]types.User) {
+func appendUsersUpdated(userNames []string, users *[]types.User) {
 	timeNow := time.Now()
 	for _, userName := range userNames {
 		*users = append(*users, types.User{Name: userName, LastSeen: timeNow})
@@ -89,7 +88,7 @@ func WriteInitialDataToUsersFile(channelName string, apiClient *twitch.ApiClient
 	}
 
 	users := make([]types.User, 0, len(userNames))
-	appendPresentUsers(userNames, &users)
+	appendUsersUpdated(userNames, &users)
 
 	if err = gocsv.MarshalFile(&users, f); err != nil {
 		log.Fatal(err)
@@ -113,7 +112,7 @@ func GetFirstUserFromFile(channelName string) string {
 	return userName
 }
 
-func UpdateUsersFile(channelName string, userNames []string) {
+func UpdateUsersFile(channelName string, onlineUserNames, offlineUserNames []string) {
 	f, err := os.OpenFile(filePath(channelName), os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		log.Fatal(err)
@@ -126,8 +125,8 @@ func UpdateUsersFile(channelName string, userNames []string) {
 		log.Fatal(err)
 	}
 
-	appendAbsentUsers(usersFromFile, userNames, &users)
-	appendPresentUsers(userNames, &users)
+	appendUsersAsIs(usersFromFile, offlineUserNames, &users)
+	appendUsersUpdated(onlineUserNames, &users)
 
 	if _, err = f.Seek(0, 0); err != nil {
 		log.Fatal(err)
@@ -139,23 +138,26 @@ func UpdateUsersFile(channelName string, userNames []string) {
 	log.Printf("Updated users list for %s", channelName)
 }
 
-func GetOnlineVips(ircClient *twitchIRC.Client, apiClient *twitch.ApiClient, channelName string) ([]string, error) {
+func GetOnlineOfflineVips(ircClient *twitchIRC.Client, apiClient *twitch.ApiClient, channelName string) ([]string, []string, error) {
 	userLogins, err := ircClient.Userlist(channelName)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	vips, err := apiClient.GetVips(channelName)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	presentVipLogins := make([]string, 0, len(vips))
+	absentVipLogins := make([]string, 0, len(vips))
 	for _, vip := range vips {
 		if slices.Contains(userLogins, vip.UserLogin) {
 			presentVipLogins = append(presentVipLogins, vip.UserLogin)
+		} else {
+			absentVipLogins = append(absentVipLogins, vip.UserLogin)
 		}
 	}
 
-	return presentVipLogins, nil
+	return presentVipLogins, absentVipLogins, nil
 }

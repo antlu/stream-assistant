@@ -12,7 +12,6 @@ import (
 
 	twitchIRC "github.com/gempir/go-twitch-irc/v4"
 	"github.com/gocarina/gocsv"
-	"github.com/nicklaw5/helix/v2"
 
 	"github.com/antlu/stream-assistant/internal"
 	"github.com/antlu/stream-assistant/internal/twitch"
@@ -56,21 +55,30 @@ func createUsersFileIfNotExists(channelName string) (*os.File, func(), error) {
 	}, nil
 }
 
-func convertUsernamesToUsers(userNames []string, users *[]types.User) {
+func appendAbsentUsers(usersFromFile []types.User, userNames []string, users *[]types.User) {
+	for _, user := range usersFromFile {
+		if slices.Contains(userNames, user.Name) {
+			continue
+		}
+		*users = append(*users, user)
+	}
+}
+
+func appendPresentUsers(userNames []string, users *[]types.User) {
 	timeNow := time.Now()
 	for _, userName := range userNames {
 		*users = append(*users, types.User{Name: userName, LastSeen: timeNow})
 	}
 }
 
-func WriteDataToUsersFileIfNotExists(channelName string, callback func(string) ([]helix.ChannelVips, error)) {
+func WriteInitialDataToUsersFile(channelName string, apiClient *twitch.ApiClient) {
 	f, close, err := createUsersFileIfNotExists(channelName)
 	if err != nil {
 		return
 	}
 	defer close()
 
-	usersFromResponse, err := callback(channelName)
+	usersFromResponse, err := apiClient.GetVips(channelName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -81,7 +89,7 @@ func WriteDataToUsersFileIfNotExists(channelName string, callback func(string) (
 	}
 
 	users := make([]types.User, 0, len(userNames))
-	convertUsernamesToUsers(userNames, &users)
+	appendPresentUsers(userNames, &users)
 
 	if err = gocsv.MarshalFile(&users, f); err != nil {
 		log.Fatal(err)
@@ -112,27 +120,14 @@ func UpdateUsersFile(channelName string, userNames []string) {
 	}
 	defer f.Close()
 
-	fi, err := f.Stat()
-	if err != nil {
+	users := []types.User{}
+	usersFromFile := []types.User{}
+	if err = gocsv.UnmarshalFile(f, &usersFromFile); err != nil {
 		log.Fatal(err)
 	}
 
-	users := []types.User{}
-	if fi.Size() != 0 {
-		usersFromFile := []types.User{}
-		if err = gocsv.UnmarshalFile(f, &usersFromFile); err != nil {
-			log.Fatal(err)
-		}
-		// filter online users
-		for _, user := range usersFromFile {
-			if slices.Contains(userNames, user.Name) {
-				continue
-			}
-			users = append(users, user)
-		}
-	}
-
-	convertUsernamesToUsers(userNames, &users)
+	appendAbsentUsers(usersFromFile, userNames, &users)
+	appendPresentUsers(userNames, &users)
 
 	if _, err = f.Seek(0, 0); err != nil {
 		log.Fatal(err)

@@ -11,6 +11,19 @@ import (
 	"github.com/antlu/stream-assistant/internal"
 )
 
+// TODO: split into different types
+type PayloadEvent struct {
+	ID                   string    `json:"id"`
+	UserID               string    `json:"user_id"`
+	UserLogin            string    `json:"user_login"`
+	UserName             string    `json:"user_name"`
+	BroadcasterUserID    string    `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string    `json:"broadcaster_user_login"`
+	BroadcasterUserName  string    `json:"broadcaster_user_name"`
+	Type                 string    `json:"type"`
+	StartedAt            time.Time `json:"started_at"`
+}
+
 type incomingMessage struct {
 	Metadata struct {
 		MessageID           string    `json:"message_id"`
@@ -42,16 +55,17 @@ type incomingMessage struct {
 			}
 			CreatedAt time.Time `json:"created_at"`
 		} `json:"subscription"`
-		Event struct {
-			ID                   string    `json:"id"`
-			BroadcasterUserID    string    `json:"broadcaster_user_id"`
-			BroadcasterUserLogin string    `json:"broadcaster_user_login"`
-			BroadcasterUserName  string    `json:"broadcaster_user_name"`
-			Type                 string    `json:"type"`
-			StartedAt            time.Time `json:"started_at"`
-		} `json:"event"`
+		Event PayloadEvent `json:"event"`
 	} `json:"payload"`
 }
+
+const (
+	streamOnline  = "stream.online"
+	streamOffline = "stream.offline"
+	channelVipAdd = "channel.vip.add"
+)
+
+var eventSubTypes = []string{streamOnline, streamOffline, channelVipAdd}
 
 type ReconnParams struct {
 	ReconnectUrl string
@@ -82,7 +96,7 @@ func (h handler) OnPong(conn *gws.Conn, payload []byte) {
 
 func (h handler) OnMessage(conn *gws.Conn, message *gws.Message) {
 	msg := incomingMessage{}
-	json.Unmarshal(message.Data.Bytes(), &msg)
+	json.Unmarshal(message.Bytes(), &msg)
 
 	switch msg.Metadata.MessageType {
 	case "session_welcome":
@@ -95,14 +109,15 @@ func (h handler) OnMessage(conn *gws.Conn, message *gws.Message) {
 		createSub := createSubRequester(h.Client, msg.Payload.Session.ID)
 		for _, channel := range h.channels.Dict {
 			go func() {
-				createSub(channel.ID, helix.EventSubTypeStreamOnline)
-				createSub(channel.ID, helix.EventSubTypeStreamOffline)
+				for _, subType := range eventSubTypes {
+					createSub(channel.ID, subType)
+				}
 			}()
 		}
 	case "session_keepalive":
 		// log.Print("Keepalive message")
 	case "notification":
-		h.switchChannelLiveStatus(msg.Payload.Event.BroadcasterUserLogin, msg.Payload.Subscription.Type)
+		h.handleNotification(msg.Payload.Event, msg.Payload.Subscription.Type)
 	case "session_reconnect":
 		// log.Print("Reconnection requested")
 		StartTwitchWSCommunication(
@@ -121,20 +136,20 @@ func (h handler) OnMessage(conn *gws.Conn, message *gws.Message) {
 	message.Close()
 }
 
-func (h handler) switchChannelLiveStatus(channelName, status string) {
-	var isLive bool
+func (h handler) handleNotification(event PayloadEvent, subType string) {
+	channelName := event.BroadcasterUserLogin
 
-	switch status {
-	case helix.EventSubTypeStreamOnline:
-		isLive = true
-	case helix.EventSubTypeStreamOffline:
-		isLive = false
+	switch subType {
+	case streamOnline:
+		h.channels.Dict[channelName].IsLive = true
+	case streamOffline:
+		h.channels.Dict[channelName].IsLive = false
+	case channelVipAdd:
+		appendUserToFile(channelName, event.UserLogin)
 	default:
-		log.Printf("Unknown channel status: %s (%s)", status, channelName)
+		log.Printf("Unknown channel subscription type: %s (%s)", subType, channelName)
 		return
 	}
-
-	h.channels.Dict[channelName].IsLive = isLive
 }
 
 func createSubRequester(client *helix.Client, sessionID string) func(string, string) {

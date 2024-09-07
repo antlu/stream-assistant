@@ -3,6 +3,7 @@ package app
 import (
 	"bufio"
 	"errors"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -128,7 +129,7 @@ func UpdateUsersFile(channelName string, onlineUserNames, offlineUserNames []str
 	appendUsersAsIs(usersFromFile, offlineUserNames, &users)
 	appendUsersUpdated(onlineUserNames, &users)
 
-	if _, err = f.Seek(0, 0); err != nil {
+	if _, err = f.Seek(0, io.SeekStart); err != nil {
 		log.Fatal(err)
 	}
 	if err = gocsv.MarshalFile(&users, f); err != nil {
@@ -136,6 +137,19 @@ func UpdateUsersFile(channelName string, onlineUserNames, offlineUserNames []str
 	}
 
 	log.Printf("Updated users list for %s", channelName)
+}
+
+func appendUserToFile(channelName string, userName string) {
+	f, err := os.OpenFile(filePath(channelName), os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	users := []types.User{{Name: userName, LastSeen: time.Now()}}
+	if err = gocsv.MarshalWithoutHeaders(&users, f); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func GetOnlineOfflineVips(ircClient *twitchIRC.Client, apiClient *twitch.ApiClient, channelName string) ([]string, []string, error) {

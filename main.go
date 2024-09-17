@@ -15,6 +15,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/nicklaw5/helix/v2"
 
+	types "github.com/antlu/stream-assistant/internal"
 	"github.com/antlu/stream-assistant/internal/app"
 	"github.com/antlu/stream-assistant/internal/twitch"
 )
@@ -89,9 +90,15 @@ func main() {
 			}
 
 			for _, moderator := range resp.Data.Moderators {
-				channel.Raffle.Ineligible[moderator.UserID] = moderator.UserName
+				channel.Raffle.Ineligible[moderator.UserID] = types.RaffleParticipant{
+					ID:   moderator.UserID,
+					Name: moderator.UserName,
+				}
 			}
-			channel.Raffle.Ineligible[msgAuthorID] = msgAuthorName
+			channel.Raffle.Ineligible[msgAuthorID] = types.RaffleParticipant{
+				ID:   msgAuthorID,
+				Name: msgAuthorName,
+			}
 			ircClient.Say(channelName, fmt.Sprintf("Розыгрыш начался! Для участия отправь в чат %s", channel.Raffle.EnrollMsg))
 
 			time.AfterFunc(30*time.Second, func() {
@@ -115,21 +122,21 @@ func main() {
 				}
 
 				var (
-					loserID  string
-					winnerID string
+					loser  types.RaffleParticipant
+					winner types.RaffleParticipant
 				)
 
 				for _, participantID := range participantIDs {
 					if !slices.Contains(vipIDs, participantID) {
-						winnerID = participantID
+						winner = channel.Raffle.Participants[participantID]
 						break
 					}
-					if loserID == "" {
-						loserID = participantID
+					if loser.ID == "" {
+						loser = channel.Raffle.Participants[participantID]
 					}
 				}
 
-				if winnerID == "" {
+				if winner.ID == "" {
 					log.Print("No one won")
 					return
 				}
@@ -137,27 +144,27 @@ func main() {
 				for i := 0; i < 2; i++ {
 					log.Printf("VIPs routine: attempt %d", i+1)
 
-					if loserID != "" {
+					if loser.ID != "" {
 						_, err := apiClient.RemoveChannelVip(&helix.RemoveChannelVipParams{
-							UserID:        loserID,
+							UserID:        loser.ID,
 							BroadcasterID: channel.ID,
 						})
 						if err != nil {
 							log.Print(err)
 						}
 
-						log.Printf("Demoted %s", channel.Raffle.Participants[loserID])
+						log.Printf("Demoted %s", loser.Name)
 					}
 
 					resp, err := apiClient.AddChannelVip(&helix.AddChannelVipParams{
-						UserID:        winnerID,
+						UserID:        winner.ID,
 						BroadcasterID: channel.ID,
 					})
 					if err != nil {
 						log.Print(err)
 					}
 					if resp.StatusCode == http.StatusNoContent {
-						log.Printf("Promoted %s", channel.Raffle.Participants[winnerID])
+						log.Printf("Promoted %s", winner.Name)
 						break
 					}
 					if resp.StatusCode == http.StatusConflict {
@@ -168,16 +175,15 @@ func main() {
 							log.Print(err)
 						}
 
-						channel.Raffle.Participants[users[0].ID] = users[0].DisplayName
-						loserID = users[0].ID
+						loser = types.RaffleParticipant{ID: users[0].ID, Name: users[0].DisplayName}
 					}
 				}
 
 				unvipMsg := ""
-				if loserID != "" {
-					unvipMsg = fmt.Sprintf("%s потерял випку. ", channel.Raffle.Participants[loserID])
+				if loser.ID != "" {
+					unvipMsg = fmt.Sprintf("%s потерял випку. ", loser.Name)
 				}
-				resultMsg := fmt.Sprintf("%sНовый вип — %s!", unvipMsg, channel.Raffle.Participants[winnerID])
+				resultMsg := fmt.Sprintf("%sНовый вип — %s!", unvipMsg, winner.Name)
 				ircClient.Say(channelName, resultMsg)
 			})
 
@@ -189,7 +195,10 @@ func main() {
 				return
 			}
 
-			channel.Raffle.Participants[msgAuthorID] = msgAuthorName
+			channel.Raffle.Participants[msgAuthorID] = types.RaffleParticipant{
+				ID:   msgAuthorID,
+				Name: msgAuthorName,
+			}
 			log.Printf("%s joined the raffle", msgAuthorName)
 		}
 	})

@@ -115,8 +115,8 @@ func main() {
 				}
 
 				var (
-					unvipTargetID string
-					winnerID      string
+					loserID  string
+					winnerID string
 				)
 
 				for _, participantID := range participantIDs {
@@ -124,8 +124,8 @@ func main() {
 						winnerID = participantID
 						break
 					}
-					if unvipTargetID == "" {
-						unvipTargetID = participantID
+					if loserID == "" {
+						loserID = participantID
 					}
 				}
 
@@ -137,16 +137,16 @@ func main() {
 				for i := 0; i < 2; i++ {
 					log.Printf("VIPs routine: attempt %d", i+1)
 
-					if unvipTargetID != "" {
+					if loserID != "" {
 						_, err := apiClient.RemoveChannelVip(&helix.RemoveChannelVipParams{
-							UserID:        unvipTargetID,
+							UserID:        loserID,
 							BroadcasterID: channel.ID,
 						})
 						if err != nil {
 							log.Print(err)
 						}
 
-						log.Printf("Demoted %s", channel.Raffle.Participants[unvipTargetID])
+						log.Printf("Demoted %s", channel.Raffle.Participants[loserID])
 					}
 
 					resp, err := apiClient.AddChannelVip(&helix.AddChannelVipParams{
@@ -168,13 +168,14 @@ func main() {
 							log.Print(err)
 						}
 
-						unvipTargetID = users[0].ID
+						channel.Raffle.Participants[users[0].ID] = users[0].DisplayName
+						loserID = users[0].ID
 					}
 				}
 
 				unvipMsg := ""
-				if unvipTargetID != "" {
-					unvipMsg = fmt.Sprintf("%s потерял випку. ", channel.Raffle.Participants[unvipTargetID])
+				if loserID != "" {
+					unvipMsg = fmt.Sprintf("%s потерял випку. ", channel.Raffle.Participants[loserID])
 				}
 				resultMsg := fmt.Sprintf("%sНовый вип — %s!", unvipMsg, channel.Raffle.Participants[winnerID])
 				ircClient.Say(channelName, resultMsg)

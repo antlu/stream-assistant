@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>Stream Assistant</title>
+  </head>
+  <body>
+    <a href="https://id.twitch.tv/oauth2/authorize{{"" -}}
+    ?client_id={{.Get "client_id" -}}
+    &redirect_uri={{.Get "redirect_uri" -}}
+    &response_type={{.Get "response_type" -}}
+    &scope={{.Get "scope" -}}
+    &state={{.Get "state"}}">
+      Login with Twitch
+    </a>
+  </body>
+</html>

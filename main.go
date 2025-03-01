@@ -207,6 +207,8 @@ func main() {
 
 	app.StartTwitchWSCommunication(apiClient, channels, app.ReconnParams{})
 
+	app.StartWebServer()
+
 	err = ircClient.Connect()
 	if err != nil {
 		log.Fatal("Error connecting to Twitch")

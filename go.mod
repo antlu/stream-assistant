@@ -13,8 +13,11 @@ require (
 	github.com/nicklaw5/helix/v2 v2.30.0
 )
 
+require github.com/gorilla/securecookie v1.1.2 // indirect
+
 require (
 	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/golang-jwt/jwt/v4 v4.0.0 // indirect
+	github.com/gorilla/sessions v1.4.0
 	github.com/klauspost/compress v1.17.5 // indirect
 )

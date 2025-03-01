@@ -49,13 +49,17 @@ func StartWebServer() {
 
 		twitchAuthQueryParams := prepareTwitchAuthQueryParams()
 		session.Values["state"] = twitchAuthQueryParams.Get("state")
+		flashes := session.Flashes()
 		err = session.Save(r, w)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		tmpl.Execute(w, twitchAuthQueryParams)
+		tmpl.Execute(w, map[string]any {
+			"flashes": flashes,
+			"twitchParams":  twitchAuthQueryParams,
+		})
 	})
 
 	mux.HandleFunc("GET /auth", func(w http.ResponseWriter, r *http.Request) {
@@ -100,6 +104,13 @@ func StartWebServer() {
 		err = json.NewDecoder(resp.Body).Decode(&tokenResponse)
 		if err != nil {
 			log.Print(err)
+		}
+
+		session.AddFlash("Authorized")
+		err = session.Save(r, w)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
 		http.Redirect(w, r, "/", http.StatusSeeOther)

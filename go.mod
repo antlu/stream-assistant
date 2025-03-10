@@ -13,7 +13,10 @@ require (
 	github.com/nicklaw5/helix/v2 v2.30.0
 )
 
-require github.com/gorilla/securecookie v1.1.2 // indirect
+require (
+	github.com/gorilla/securecookie v1.1.2 // indirect
+	github.com/mattn/go-sqlite3 v1.14.24 // indirect
+)
 
 require (
 	github.com/dolthub/maphash v0.1.0 // indirect

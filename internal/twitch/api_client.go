@@ -10,19 +10,23 @@ import (
 
 type ApiClient struct {
 	*helix.Client
-	channel string
+	channelName string
 }
 
-func NewApiClient(channel, uat string) *ApiClient {
+func NewApiClient(accessToken string) *helix.Client{
 	client, err := helix.NewClient(&helix.Options{
 		ClientID:        "jmaoofuyr1c4v8lqzdejzfppdj5zym",
-		UserAccessToken: uat,
+		UserAccessToken: accessToken,
 	})
 	if err != nil {
-		log.Fatalf("Error creating API client for %s", channel)
+		log.Fatalf("Error creating API client")
 	}
+	return client
+}
 
-	return &ApiClient{client, channel}
+func NewApiClientWithChannel(channelName, accessToken string) *ApiClient {
+	client := NewApiClient(accessToken)
+	return &ApiClient{client, channelName}
 }
 
 func (ac ApiClient) GetUsersInfo(names ...string) ([]helix.User, error) {

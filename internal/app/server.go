@@ -2,14 +2,17 @@ package app
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"html/template"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 
+	"github.com/antlu/stream-assistant/internal/twitch"
 	"github.com/gorilla/sessions"
 )
 
@@ -35,7 +38,7 @@ func StartWebServer() {
 		log.Fatal(err)
 	}
 
-	cookieStore := sessions.NewCookieStore([]byte(os.Getenv("SA_SESSION_KEY")))
+	cookieStore := sessions.NewCookieStore([]byte(os.Getenv("SA_SECURE_KEY")))
 
 	mux := http.NewServeMux()
 
@@ -105,6 +108,39 @@ func StartWebServer() {
 		if err != nil {
 			log.Print(err)
 		}
+
+		go func() {
+			apiClient := twitch.NewApiClient(tokenResponse.AccessToken)
+			usersResp, err := apiClient.GetUsers(nil)
+			if err != nil {
+				log.Print("Error getting user info")
+				return
+			}
+			userData := usersResp.Data.Users[0]
+
+			db := openDB()
+			defer db.Close()
+			err = db.QueryRow("SELECT id FROM users WHERE id = ?", userData.ID).Scan(&userData.ID)
+			if errors.Is(err, sql.ErrNoRows) {
+				_, err = db.Exec(
+					`INSERT INTO users (id, login, access_token, refresh_token) VALUES (?, ?, ?, ?)`,
+					userData.ID, userData.Login, tokenResponse.AccessToken, tokenResponse.RefreshToken,
+				)
+				if err != nil {
+					log.Print(err)
+				}
+			} else if err != nil {
+				log.Print(err)
+				return
+			}
+			_, err = db.Exec(
+				"UPDATE users SET access_token = ?, refresh_token = ? WHERE id = ?",
+				tokenResponse.AccessToken, tokenResponse.RefreshToken, userData.ID,
+			)
+			if err != nil {
+				log.Print(err)
+			}
+		}()
 
 		session.AddFlash("Authorized")
 		err = session.Save(r, w)

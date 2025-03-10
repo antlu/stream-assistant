@@ -38,6 +38,7 @@ func main() {
 		log.Fatal("Error creating API client")
 	}
 
+	//
 	channels := app.PrepareChannels(channelUatPairs, apiClient)
 
 	apiClientForChannel := make(map[string]*twitch.ApiClient)
@@ -49,7 +50,7 @@ func main() {
 		go func() {
 			channelName := message.Channel
 			log.Printf("Joined %s", channelName)
-			apiClient := twitch.NewApiClient(channelName, channels.Dict[channelName].UAT)
+			apiClient := twitch.NewApiClientWithChannel(channelName, channels.Dict[channelName].UAT)
 			apiClientForChannel[channelName] = apiClient
 			app.WriteInitialDataToUsersFile(channelName, apiClient)
 

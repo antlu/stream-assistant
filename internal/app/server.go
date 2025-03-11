@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/antlu/stream-assistant/internal/twitch"
 	"github.com/gorilla/sessions"
+	"github.com/gtank/cryptopasta"
 )
 
 func generateSecret() string {
@@ -117,6 +119,24 @@ func StartWebServer() {
 				return
 			}
 			userData := usersResp.Data.Users[0]
+			secureKey, err := hex.DecodeString(os.Getenv("SA_SECURE_KEY"))
+			secureKeyPointer := (*[32]byte)(secureKey)
+			if err != nil {
+				log.Print(err)
+				return
+			}
+			securedAccessToken, err := cryptopasta.Encrypt([]byte(tokenResponse.AccessToken), secureKeyPointer)
+			if err != nil {
+				log.Print(err)
+				return
+			}
+			securedRefreshToken, err := cryptopasta.Encrypt([]byte(tokenResponse.RefreshToken), secureKeyPointer)
+			if err != nil {
+				log.Print(err)
+				return
+			}
+			securedAccessTokenHex := hex.EncodeToString(securedAccessToken)
+			securedRefreshTokenHex := hex.EncodeToString(securedRefreshToken)
 
 			db := openDB()
 			defer db.Close()
@@ -124,7 +144,7 @@ func StartWebServer() {
 			if errors.Is(err, sql.ErrNoRows) {
 				_, err = db.Exec(
 					`INSERT INTO users (id, login, access_token, refresh_token) VALUES (?, ?, ?, ?)`,
-					userData.ID, userData.Login, tokenResponse.AccessToken, tokenResponse.RefreshToken,
+					userData.ID, userData.Login, securedAccessTokenHex, securedRefreshTokenHex,
 				)
 				if err != nil {
 					log.Print(err)
@@ -135,7 +155,7 @@ func StartWebServer() {
 			}
 			_, err = db.Exec(
 				"UPDATE users SET access_token = ?, refresh_token = ? WHERE id = ?",
-				tokenResponse.AccessToken, tokenResponse.RefreshToken, userData.ID,
+				securedAccessTokenHex, securedRefreshTokenHex, userData.ID,
 			)
 			if err != nil {
 				log.Print(err)

@@ -9,13 +9,15 @@ require (
 
 require (
 	github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1
+	github.com/gtank/cryptopasta v0.0.0-20170601214702-1f550f6f2f69
 	github.com/lxzan/gws v1.8.5
+	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/nicklaw5/helix/v2 v2.30.0
 )
 
 require (
 	github.com/gorilla/securecookie v1.1.2 // indirect
-	github.com/mattn/go-sqlite3 v1.14.24 // indirect
+	golang.org/x/crypto v0.17.0 // indirect
 )
 
 require (

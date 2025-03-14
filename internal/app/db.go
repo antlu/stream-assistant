@@ -7,7 +7,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const dbPath = "data/db.sqlite3"
+const dbPath = "db.sqlite3"
 
 func openDB() *sql.DB {
 	db, err := sql.Open("sqlite3", dbPath)
@@ -15,7 +15,7 @@ func openDB() *sql.DB {
 		log.Fatal(err)
 	}
 
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS users (
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS channels (
 		id INTEGER PRIMARY KEY, login TEXT, access_token TEXT, refresh_token TEXT
 	);`)
 	if err != nil {

@@ -74,7 +74,7 @@ type ReconnParams struct {
 
 type handler struct {
 	*helix.Client
-	channels     *types.Channels
+	channels     types.ChannelsDict
 	closeOldConn func()
 }
 
@@ -107,7 +107,7 @@ func (h handler) OnMessage(conn *gws.Conn, message *gws.Message) {
 		}
 
 		createSub := createSubRequester(h.Client, msg.Payload.Session.ID)
-		for _, channel := range h.channels.Dict {
+		for _, channel := range h.channels {
 			go func() {
 				for _, subType := range eventSubTypes {
 					createSub(channel.ID, subType)
@@ -141,9 +141,9 @@ func (h handler) handleNotification(event PayloadEvent, subType string) {
 
 	switch subType {
 	case streamOnline:
-		h.channels.Dict[channelName].IsLive = true
+		h.channels[channelName].IsLive = true
 	case streamOffline:
-		h.channels.Dict[channelName].IsLive = false
+		h.channels[channelName].IsLive = false
 	case channelVipAdd:
 		appendUserToFile(channelName, event.UserLogin)
 	default:
@@ -166,7 +166,7 @@ func createSubRequester(client *helix.Client, sessionID string) func(string, str
 	}
 }
 
-func StartTwitchWSCommunication(apiClient *helix.Client, channels *types.Channels, params ReconnParams) {
+func StartTwitchWSCommunication(apiClient *helix.Client, channels types.ChannelsDict, params ReconnParams) {
 	serverAddr := "wss://eventsub.wss.twitch.tv/ws"
 	if params.ReconnectUrl != "" {
 		serverAddr = params.ReconnectUrl

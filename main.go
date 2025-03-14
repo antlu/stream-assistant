@@ -28,7 +28,6 @@ func main() {
 
 	nick := os.Getenv("SA_NICK")
 	pass := os.Getenv("SA_PASS")
-	channelUatPairs := os.Getenv("SA_CHANNEL_UAT_PAIRS")
 
 	apiClient, err := helix.NewClient(&helix.Options{
 		ClientID:        "jmaoofuyr1c4v8lqzdejzfppdj5zym",
@@ -38,8 +37,7 @@ func main() {
 		log.Fatal("Error creating API client")
 	}
 
-	//
-	channels := app.PrepareChannels(channelUatPairs, apiClient)
+	channels := app.PrepareChannels(apiClient)
 
 	apiClientForChannel := make(map[string]*twitch.ApiClient)
 
@@ -50,13 +48,13 @@ func main() {
 		go func() {
 			channelName := message.Channel
 			log.Printf("Joined %s", channelName)
-			apiClient := twitch.NewApiClientWithChannel(channelName, channels.Dict[channelName].UAT)
+			apiClient := twitch.NewApiClientWithChannel(channelName, channels[channelName].UAT)
 			apiClientForChannel[channelName] = apiClient
 			app.WriteInitialDataToUsersFile(channelName, apiClient)
 
 			for {
 				time.Sleep(5 * time.Minute)
-				if channels.Dict[channelName].IsLive {
+				if channels[channelName].IsLive {
 					onlineVips, offlineVips, err := app.GetOnlineOfflineVips(ircClient, apiClient, channelName)
 					if err != nil {
 						log.Print(err)
@@ -70,7 +68,7 @@ func main() {
 
 	ircClient.OnPrivateMessage(func(message twitchIRC.PrivateMessage) {
 		channelName := message.Channel
-		channel := channels.Dict[channelName]
+		channel := channels[channelName]
 		apiClient := apiClientForChannel[channelName]
 		msgAuthorName := message.User.DisplayName
 		msgAuthorID := message.User.ID
@@ -204,7 +202,7 @@ func main() {
 		}
 	})
 
-	ircClient.Join(channels.Names...)
+	ircClient.Join(slices.Collect(maps.Keys(channels))...)
 
 	app.StartTwitchWSCommunication(apiClient, channels, app.ReconnParams{})
 

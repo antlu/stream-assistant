@@ -140,10 +140,10 @@ func StartWebServer() {
 
 			db := openDB()
 			defer db.Close()
-			err = db.QueryRow("SELECT id FROM users WHERE id = ?", userData.ID).Scan(&userData.ID)
+			err = db.QueryRow("SELECT id FROM channels WHERE id = ?", userData.ID).Scan(&userData.ID)
 			if errors.Is(err, sql.ErrNoRows) {
 				_, err = db.Exec(
-					`INSERT INTO users (id, login, access_token, refresh_token) VALUES (?, ?, ?, ?)`,
+					`INSERT INTO channels (id, login, access_token, refresh_token) VALUES (?, ?, ?, ?)`,
 					userData.ID, userData.Login, securedAccessTokenHex, securedRefreshTokenHex,
 				)
 				if err != nil {
@@ -154,7 +154,7 @@ func StartWebServer() {
 				return
 			}
 			_, err = db.Exec(
-				"UPDATE users SET access_token = ?, refresh_token = ? WHERE id = ?",
+				"UPDATE channels SET access_token = ?, refresh_token = ? WHERE id = ?",
 				securedAccessTokenHex, securedRefreshTokenHex, userData.ID,
 			)
 			if err != nil {

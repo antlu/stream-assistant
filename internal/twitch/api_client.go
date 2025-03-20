@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/nicklaw5/helix/v2"
 )
@@ -13,20 +14,27 @@ type ApiClient struct {
 	channelName string
 }
 
-func NewApiClient(accessToken string) *helix.Client{
+func NewApiClient(accessToken, refreshToken string) (*helix.Client, error){
 	client, err := helix.NewClient(&helix.Options{
 		ClientID:        "jmaoofuyr1c4v8lqzdejzfppdj5zym",
+		ClientSecret:    os.Getenv("SA_CLIENT_SECRET"),
 		UserAccessToken: accessToken,
+		RefreshToken:    refreshToken,
 	})
 	if err != nil {
-		log.Fatalf("Error creating API client")
+		return nil, err
 	}
-	return client
+
+	client.OnUserAccessTokenRefreshed()
+	return client, nil
 }
 
-func NewApiClientWithChannel(channelName, accessToken string) *ApiClient {
-	client := NewApiClient(accessToken)
-	return &ApiClient{client, channelName}
+func NewApiClientWithChannel(channelName, accessToken string) (*ApiClient, error) {
+	client, err := NewApiClient(accessToken)
+	if err != nil {
+		return nil, err
+	}
+	return &ApiClient{client, channelName}, nil
 }
 
 func (ac ApiClient) GetUsersInfo(names ...string) ([]helix.User, error) {

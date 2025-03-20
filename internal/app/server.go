@@ -2,11 +2,8 @@ package app
 
 import (
 	"crypto/rand"
-	"database/sql"
 	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -15,7 +12,6 @@ import (
 
 	"github.com/antlu/stream-assistant/internal/twitch"
 	"github.com/gorilla/sessions"
-	"github.com/gtank/cryptopasta"
 )
 
 func generateSecret() string {
@@ -34,7 +30,7 @@ func prepareTwitchAuthQueryParams() url.Values {
 	return params
 }
 
-func StartWebServer() {
+func StartWebServer(tokenManager *twitch.TokenManager) {
 	tmpl, err := template.ParseFiles("templates/index.html")
 	if err != nil {
 		log.Fatal(err)
@@ -61,9 +57,9 @@ func StartWebServer() {
 			return
 		}
 
-		tmpl.Execute(w, map[string]any {
-			"flashes": flashes,
-			"twitchParams":  twitchAuthQueryParams,
+		tmpl.Execute(w, map[string]any{
+			"flashes":      flashes,
+			"twitchParams": twitchAuthQueryParams,
 		})
 	})
 
@@ -74,9 +70,9 @@ func StartWebServer() {
 			return
 		}
 
-		state := r.URL.Query().Get("state")
-		if state != session.Values["state"] {
-			http.Error(w, "Invalid state", http.StatusBadRequest)
+		// TODO:DELETE !=
+		if r.URL.Query().Get("state") != session.Values["state"] {
+			http.Error(w, fmt.Sprintf("Invalid state %s != %s", session.Values["state"], r.URL.Query().Get("state")), http.StatusBadRequest)
 			return
 		}
 
@@ -86,81 +82,13 @@ func StartWebServer() {
 			return
 		}
 
-		code := r.URL.Query().Get("code")
-		resp, err := http.PostForm("https://id.twitch.tv/oauth2/token", url.Values{
-			"client_id":     {"jmaoofuyr1c4v8lqzdejzfppdj5zym"},
-			"client_secret": {os.Getenv("SA_CLIENT_SECRET")},
-			"code":          {code},
-			"grant_type":    {"authorization_code"},
-			"redirect_uri":  {"http://localhost:3000/auth"},
-		})
+		tokensData, err := twitch.ExchangeCodeForTokens(r.URL.Query().Get("code"))
 		if err != nil {
-			log.Print(err)
-		}
-		defer resp.Body.Close()
-
-		var tokenResponse struct {
-			AccessToken string `json:"access_token"`
-			ExpiresIn int `json:"expires_in"`
-			RefreshToken string `json:"refresh_token"`
-			Scope []string `json:"scope"`
-			TokenType string `json:"token_type"`
-		}
-		err = json.NewDecoder(resp.Body).Decode(&tokenResponse)
-		if err != nil {
-			log.Print(err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
-		go func() {
-			apiClient := twitch.NewApiClient(tokenResponse.AccessToken)
-			usersResp, err := apiClient.GetUsers(nil)
-			if err != nil {
-				log.Print("Error getting user info")
-				return
-			}
-			userData := usersResp.Data.Users[0]
-			secureKey, err := hex.DecodeString(os.Getenv("SA_SECURE_KEY"))
-			secureKeyPointer := (*[32]byte)(secureKey)
-			if err != nil {
-				log.Print(err)
-				return
-			}
-			securedAccessToken, err := cryptopasta.Encrypt([]byte(tokenResponse.AccessToken), secureKeyPointer)
-			if err != nil {
-				log.Print(err)
-				return
-			}
-			securedRefreshToken, err := cryptopasta.Encrypt([]byte(tokenResponse.RefreshToken), secureKeyPointer)
-			if err != nil {
-				log.Print(err)
-				return
-			}
-			securedAccessTokenHex := hex.EncodeToString(securedAccessToken)
-			securedRefreshTokenHex := hex.EncodeToString(securedRefreshToken)
-
-			db := openDB()
-			defer db.Close()
-			err = db.QueryRow("SELECT id FROM channels WHERE id = ?", userData.ID).Scan(&userData.ID)
-			if errors.Is(err, sql.ErrNoRows) {
-				_, err = db.Exec(
-					`INSERT INTO channels (id, login, access_token, refresh_token) VALUES (?, ?, ?, ?)`,
-					userData.ID, userData.Login, securedAccessTokenHex, securedRefreshTokenHex,
-				)
-				if err != nil {
-					log.Print(err)
-				}
-			} else if err != nil {
-				log.Print(err)
-				return
-			}
-			_, err = db.Exec(
-				"UPDATE channels SET access_token = ?, refresh_token = ? WHERE id = ?",
-				securedAccessTokenHex, securedRefreshTokenHex, userData.ID,
-			)
-			if err != nil {
-				log.Print(err)
-			}
-		}()
+		go tokenManager.CreateOrUpdateStoreRecord(tokensData)
 
 		session.AddFlash("Authorized")
 		err = session.Save(r, w)

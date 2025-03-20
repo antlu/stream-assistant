@@ -12,7 +12,7 @@ import (
 )
 
 func PrepareChannels(apiClient *helix.Client) types.ChannelsDict {
-	db := openDB()
+	db := OpenDB()
 	defer db.Close()
 	var numberOfChannels int
 	db.QueryRow("SELECT COUNT(*) FROM channels").Scan(&numberOfChannels)

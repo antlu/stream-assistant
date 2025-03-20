@@ -9,7 +9,7 @@ import (
 
 const dbPath = "db.sqlite3"
 
-func openDB() *sql.DB {
+func OpenDB() *sql.DB {
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		log.Fatal(err)

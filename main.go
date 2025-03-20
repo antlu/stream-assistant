@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"maps"
@@ -17,6 +18,7 @@ import (
 
 	types "github.com/antlu/stream-assistant/internal"
 	"github.com/antlu/stream-assistant/internal/app"
+	"github.com/antlu/stream-assistant/internal/crypto"
 	"github.com/antlu/stream-assistant/internal/twitch"
 )
 
@@ -26,29 +28,36 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	nick := os.Getenv("SA_NICK")
-	pass := os.Getenv("SA_PASS")
+	app.StartWebServer()
 
-	apiClient, err := helix.NewClient(&helix.Options{
-		ClientID:        "jmaoofuyr1c4v8lqzdejzfppdj5zym",
-		UserAccessToken: os.Getenv("SA_USER_ACCESS_TOKEN"),
-	})
+	db := app.OpenDB()
+	defer db.Close()
+	tokenManager := twitch.NewTokenManager(db, crypto.Cipher(os.Getenv("SA_SECURE_KEY")))
+	botName := os.Getenv("SA_BOT_NAME")
+
+	apiClient, err := twitch.NewApiClient(botName, tokenManager)
 	if err != nil {
 		log.Fatal("Error creating API client")
 	}
 
 	channels := app.PrepareChannels(apiClient)
 
-	apiClientForChannel := make(map[string]*twitch.ApiClient)
-
-	ircClient := twitchIRC.NewClient(nick, pass)
+	ircClient, err := twitch.NewIRCClient(botName, tokenManager)
+	if err != nil {
+		log.Fatal(err)
+	}
 	ircClient.Capabilities = append(ircClient.Capabilities, twitchIRC.MembershipCapability)
+
+	apiClientForChannel := make(map[string]*twitch.ApiClient)
 
 	ircClient.OnSelfJoinMessage(func(message twitchIRC.UserJoinMessage) {
 		go func() {
 			channelName := message.Channel
 			log.Printf("Joined %s", channelName)
-			apiClient := twitch.NewApiClientWithChannel(channelName, channels[channelName].UAT)
+			apiClient, err := twitch.NewApiClientWithChannel(channelName, channels[channelName].UAT)
+			if err != nil {
+				log.Fatal(err)
+			}
 			apiClientForChannel[channelName] = apiClient
 			app.WriteInitialDataToUsersFile(channelName, apiClient)
 
@@ -206,10 +215,12 @@ func main() {
 
 	app.StartTwitchWSCommunication(apiClient, channels, app.ReconnParams{})
 
-	app.StartWebServer()
-
-	err = ircClient.Connect()
-	if err != nil {
-		log.Fatal("Error connecting to Twitch")
+	for {
+		err = ircClient.Connect()
+		if errors.Is(err, twitchIRC.ErrLoginAuthenticationFailed) {
+			ircClient.SetIRCToken()
+		}	else if err != nil {
+			log.Fatal("Error connecting to Twitch: %v", err)
+		}
 	}
 }

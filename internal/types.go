@@ -27,7 +27,6 @@ type Raffle struct {
 type Channel struct {
 	ID     string
 	Name   string
-	UAT    string
 	IsLive bool
 	Raffle Raffle
 }

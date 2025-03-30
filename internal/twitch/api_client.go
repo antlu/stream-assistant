@@ -1,10 +1,12 @@
 package twitch
 
 import (
+	"database/sql"
 	"errors"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/nicklaw5/helix/v2"
 )
@@ -14,9 +16,9 @@ type ApiClient struct {
 	channelName string
 }
 
-func NewApiClient(accessToken, refreshToken string) (*helix.Client, error){
+func NewApiClient(accessToken, refreshToken string) (*helix.Client, error) {
 	client, err := helix.NewClient(&helix.Options{
-		ClientID:        "jmaoofuyr1c4v8lqzdejzfppdj5zym",
+		ClientID:        os.Getenv("SA_CLIENT_ID"),
 		ClientSecret:    os.Getenv("SA_CLIENT_SECRET"),
 		UserAccessToken: accessToken,
 		RefreshToken:    refreshToken,
@@ -24,17 +26,58 @@ func NewApiClient(accessToken, refreshToken string) (*helix.Client, error){
 	if err != nil {
 		return nil, err
 	}
-
-	client.OnUserAccessTokenRefreshed()
 	return client, nil
 }
 
-func NewApiClientWithChannel(channelName, accessToken string) (*ApiClient, error) {
-	client, err := NewApiClient(accessToken)
+func NewApiClientWithChannel(channelName string, tokenManager *TokenManager) (*ApiClient, error) {
+	underlyingClient, err := NewApiClient("", "")
 	if err != nil {
 		return nil, err
 	}
-	return &ApiClient{client, channelName}, nil
+
+	client := ApiClient{underlyingClient, channelName}
+	go client.waitForTokens(tokenManager)
+
+	client.OnUserAccessTokenRefreshed(func(accessToken, refreshToken string) {
+		tokenManager.updateStorage(channelName, accessToken, refreshToken)
+	})
+
+	return &client, nil
+}
+
+func (ac ApiClient) hasTokens() bool {
+	return ac.GetUserAccessToken() != "" && ac.GetRefreshToken() != ""
+}
+
+func (ac ApiClient) WaitUntilReady(duration time.Duration) {
+	for !ac.hasTokens() {
+		time.Sleep(duration)
+	}
+}
+
+
+func (ac ApiClient) waitForTokens(tokenManager *TokenManager) {
+	var (
+		accessToken, refreshToken string
+		err                       error
+	)
+
+	for {
+		accessToken, refreshToken, err = tokenManager.ensureValidTokens(ac.channelName)
+		if err == nil {
+			ac.SetUserAccessToken(accessToken)
+			ac.SetRefreshToken(refreshToken)
+			break
+		}
+
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Printf("API: Waiting for %s authorization", ac.channelName)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+
+		log.Printf("Error getting tokens: %v", err)
+	}
 }
 
 func (ac ApiClient) GetUsersInfo(names ...string) ([]helix.User, error) {

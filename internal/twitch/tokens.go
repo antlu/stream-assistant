@@ -3,14 +3,12 @@ package twitch
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/antlu/stream-assistant/internal/crypto"
 )
@@ -24,7 +22,7 @@ type tokensData struct {
 }
 
 type tokens struct {
-	accessToken string
+	accessToken  string
 	refreshToken string
 }
 
@@ -38,13 +36,14 @@ type TokenManager struct {
 func NewTokenManager(store *sql.DB, cipher crypto.Cipher) *TokenManager {
 	return &TokenManager{
 		store:  store,
+		cache:  make(map[string]tokens),
 		cipher: cipher,
 	}
 }
 
 func (*TokenManager) refreshTokens(refreshToken string) (string, string, error) {
 	resp, err := http.PostForm("https://id.twitch.tv/oauth2/token", url.Values{
-		"client_id":     {"jmaoofuyr1c4v8lqzdejzfppdj5zym"},
+		"client_id":     {os.Getenv("SA_CLIENT_ID")},
 		"client_secret": {os.Getenv("SA_CLIENT_SECRET")},
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refreshToken},
@@ -63,69 +62,45 @@ func (*TokenManager) refreshTokens(refreshToken string) (string, string, error) 
 	return tokensData.AccessToken, tokensData.RefreshToken, nil
 }
 
-func (tm *TokenManager) getValidAccessToken(channelName string) (string, error) {
+func (tm *TokenManager) getTokens(channelName string) (string, string, bool, error) {
 	var accessToken, refreshToken string
 
 	tokenPair, cached := tm.cache[channelName]
-	if !cached {
+	if cached {
+		accessToken, refreshToken = tokenPair.accessToken, tokenPair.refreshToken
+	} else {
 		var err error
 		accessToken, refreshToken, err = tm.readFromStore(channelName)
 		if err != nil {
-			return "", err
+			return "", "", false, err
 		}
-
-		tm.RLock()
-		tm.cache[channelName] = tokens{accessToken, refreshToken}
-		tm.RUnlock()
 	}
 
-	accessToken, refreshToken = tokenPair.accessToken, tokenPair.refreshToken
-	apiClient, err := NewApiClient(accessToken)
-	if err != nil {
-		return "", fmt.Errorf("error creating API client: %w", err)
-	}
+	return accessToken, refreshToken, cached, nil
+}
 
-	isTokenValid, _, err := apiClient.ValidateToken(accessToken)
-	if err != nil {
-		return "", fmt.Errorf("error validating token: %w", err)
-	}
-
-	if !isTokenValid {
-		accessToken, refreshToken, err = tm.refreshTokens(refreshToken)
-		if err != nil {
-			return "", fmt.Errorf("error refreshing token: %w", err)
-		}
-		tm.Lock()
-		tm.cache[channelName] = tokens{accessToken, refreshToken}
-		tm.Unlock()
-
-		tm.updateStoreRecord(channelName, accessToken, refreshToken)
-	}
-
-	return accessToken, nil
+func (tm *TokenManager) updateCache(channelName, accessToken, refreshToken string) {
+	tm.Lock()
+	tm.cache[channelName] = tokens{accessToken, refreshToken}
+	tm.Unlock()
 }
 
 func (tm *TokenManager) readFromStore(channelName string) (string, string, error) {
 	var accessToken, refreshToken string
 
-	for {
-		err := tm.store.QueryRow("SELECT access_token, refresh_token FROM channels WHERE login = ?", channelName).Scan(&accessToken, &refreshToken)
-		if err == nil {
-			accessToken, err = tm.cipher.Decrypt(accessToken)
-			if err != nil {
-				return "", "", err
-			}
+	err := tm.store.QueryRow("SELECT access_token, refresh_token FROM channels WHERE login = ?", channelName).Scan(&accessToken, &refreshToken)
+	if err != nil {
+		return "", "", err
+	}
 
-			refreshToken, err = tm.cipher.Decrypt(refreshToken)
-			if err != nil {
-				return "", "", err
-			}
+	accessToken, err = tm.cipher.Decrypt(accessToken)
+	if err != nil {
+		return "", "", err
+	}
 
-			break
-		}
-
-		log.Printf("Waiting for %s authorization", channelName)
-		time.Sleep(30 * time.Second)
+	refreshToken, err = tm.cipher.Decrypt(refreshToken)
+	if err != nil {
+		return "", "", err
 	}
 
 	return accessToken, refreshToken, nil
@@ -146,35 +121,50 @@ func (tm *TokenManager) updateStoreRecord(channelName, accessToken, refreshToken
 		"UPDATE channels SET access_token = ?, refresh_token = ? WHERE login = ?",
 		accessToken, refreshToken, channelName,
 	)
-	affected, err := res.RowsAffected()
+	affected, _ := res.RowsAffected()
 	if err != nil || affected == 0 {
 		return fmt.Errorf("error updating token store: %w", err)
 	}
 
+	log.Printf("Updated tokens for %s", channelName)
 	return nil
 }
 
-func (tm *TokenManager) CreateOrUpdateStoreRecord(tokensData *tokensData) {
-	apiClient, err := NewApiClient(tokensData.AccessToken)
-	if err != nil {
-		log.Print(err)
-		return
-	}
-	usersResp, err := apiClient.GetUsers(nil)
-	if err != nil {
-		log.Print("Error getting user info")
-		return
-	}
-
-	userData := usersResp.Data.Users[0]
-	err = tm.createOrUpdateStoreRecord(userData.ID, userData.Login, tokensData.AccessToken, tokensData.RefreshToken)
-	if err != nil {
-		log.Print(err)
-		return
-	}
+func (tm *TokenManager) updateStorage(channelName, accessToken, refreshToken string) error {
+	tm.updateCache(channelName, accessToken, refreshToken)
+	return tm.updateStoreRecord(channelName, accessToken, refreshToken)
 }
 
-func (tm *TokenManager) createOrUpdateStoreRecord(id, login, accessToken, refreshToken string) error {
+func (tm *TokenManager) ensureValidTokens(channelName string) (string, string, error) {
+	accessToken, refreshToken, cached, err := tm.getTokens(channelName)
+	if err != nil {
+		return "", "", fmt.Errorf("error getting access token: %w", err)
+	}
+
+	isTokenValid, err := validateToken(accessToken)
+	if err != nil {
+		return "", "", fmt.Errorf("error validating token: %w", err)
+	}
+	if isTokenValid {
+		if !cached {
+			tm.updateCache(channelName, accessToken, refreshToken)
+		}
+		return accessToken, refreshToken, nil
+	}
+
+	accessToken, refreshToken, err = tm.refreshTokens(refreshToken)
+	if err != nil {
+		return "", "", fmt.Errorf("error refreshing token: %w", err)
+	}
+
+	err = tm.updateStorage(channelName, accessToken, refreshToken)
+	if err != nil {
+		return "", "", fmt.Errorf("error updating token store: %w", err)
+	}
+	return accessToken, refreshToken, nil
+}
+
+func (tm *TokenManager) CreateOrUpdateStoreRecord(id, login, accessToken, refreshToken string) error {
 	accessToken, err := tm.cipher.Encrypt(accessToken)
 	if err != nil {
 		log.Print(err)
@@ -187,13 +177,12 @@ func (tm *TokenManager) createOrUpdateStoreRecord(id, login, accessToken, refres
 		return err
 	}
 
-	// var affected int
-	// err = tm.store.QueryRow("SELECT EXISTS (SELECT 1 FROM channels WHERE id = ?)", id).Scan(&affected)
-	// if affected == 0 {
-
-	// }
-	err = tm.store.QueryRow("SELECT EXISTS (SELECT 1 FROM channels WHERE id = ?)", id).Scan(nil)
-	if errors.Is(err, sql.ErrNoRows) {
+	var exists bool
+	err = tm.store.QueryRow("SELECT EXISTS (SELECT 1 FROM channels WHERE id = ?)", id).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
 		_, err = tm.store.Exec(
 			`INSERT INTO channels (id, login, access_token, refresh_token) VALUES (?, ?, ?, ?)`,
 			id, login, accessToken, refreshToken,
@@ -201,28 +190,25 @@ func (tm *TokenManager) createOrUpdateStoreRecord(id, login, accessToken, refres
 		if err != nil {
 			return err
 		}
-	} else if err != nil {
-		return err
+	} else {
+		_, err = tm.store.Exec(
+			"UPDATE channels SET login = ?, access_token = ?, refresh_token = ? WHERE id = ?",
+			login, accessToken, refreshToken, id,
+		)
+		if err != nil {
+			return err
+		}
 	}
-
-	_, err = tm.store.Exec(
-		"UPDATE channels SET login = ?, access_token = ?, refresh_token = ? WHERE id = ?",
-		login, accessToken, refreshToken, id,
-	)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
 func ExchangeCodeForTokens(code string) (*tokensData, error) {
 	resp, err := http.PostForm("https://id.twitch.tv/oauth2/token", url.Values{
-		"client_id":     {"jmaoofuyr1c4v8lqzdejzfppdj5zym"},
+		"client_id":     {os.Getenv("SA_CLIENT_ID")},
 		"client_secret": {os.Getenv("SA_CLIENT_SECRET")},
 		"code":          {code},
 		"grant_type":    {"authorization_code"},
-		"redirect_uri":  {"http://localhost:3000/auth"},
+		"redirect_uri":  {os.Getenv("SA_REDIRECT_URI")},
 	})
 	if err != nil {
 		return nil, err
@@ -236,4 +222,18 @@ func ExchangeCodeForTokens(code string) (*tokensData, error) {
 	}
 
 	return &tokensData, nil
+}
+
+func validateToken(accessToken string) (bool, error) {
+	req, err := http.NewRequest(http.MethodHead, "https://id.twitch.tv/oauth2/validate", nil)
+	if err != nil {
+		return false, err
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("OAuth %s", accessToken))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+	return resp.StatusCode == http.StatusOK, nil
 }

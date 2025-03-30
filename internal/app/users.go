@@ -11,10 +11,8 @@ import (
 	"strings"
 	"time"
 
-	twitchIRC "github.com/gempir/go-twitch-irc/v4"
 	"github.com/gocarina/gocsv"
 
-	"github.com/antlu/stream-assistant/internal"
 	"github.com/antlu/stream-assistant/internal/twitch"
 )
 
@@ -56,7 +54,7 @@ func createUsersFileIfNotExists(channelName string) (*os.File, func(), error) {
 	}, nil
 }
 
-func appendUsersAsIs(usersFromFile []types.User, userNames []string, users *[]types.User) {
+func appendUsersAsIs(usersFromFile []User, userNames []string, users *[]User) {
 	for _, user := range usersFromFile {
 		if slices.Contains(userNames, user.Name) {
 			*users = append(*users, user)
@@ -64,10 +62,10 @@ func appendUsersAsIs(usersFromFile []types.User, userNames []string, users *[]ty
 	}
 }
 
-func appendUsersUpdated(userNames []string, users *[]types.User) {
+func appendUsersUpdated(userNames []string, users *[]User) {
 	timeNow := time.Now()
 	for _, userName := range userNames {
-		*users = append(*users, types.User{Name: userName, LastSeen: timeNow})
+		*users = append(*users, User{Name: userName, LastSeen: timeNow})
 	}
 }
 
@@ -88,7 +86,7 @@ func WriteInitialDataToUsersFile(channelName string, apiClient *twitch.ApiClient
 		userNames = append(userNames, user.UserLogin)
 	}
 
-	users := make([]types.User, 0, len(userNames))
+	users := make([]User, 0, len(userNames))
 	appendUsersUpdated(userNames, &users)
 
 	if err = gocsv.MarshalFile(&users, f); err != nil {
@@ -120,8 +118,8 @@ func UpdateUsersFile(channelName string, onlineUserNames, offlineUserNames []str
 	}
 	defer f.Close()
 
-	users := []types.User{}
-	usersFromFile := []types.User{}
+	users := []User{}
+	usersFromFile := []User{}
 	if err = gocsv.UnmarshalFile(f, &usersFromFile); err != nil {
 		log.Fatal(err)
 	}
@@ -146,13 +144,13 @@ func appendUserToFile(channelName string, userName string) {
 	}
 	defer f.Close()
 
-	users := []types.User{{Name: userName, LastSeen: time.Now()}}
+	users := []User{{Name: userName, LastSeen: time.Now()}}
 	if err = gocsv.MarshalWithoutHeaders(&users, f); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func GetOnlineOfflineVips(ircClient *twitchIRC.Client, apiClient *twitch.ApiClient, channelName string) ([]string, []string, error) {
+func GetOnlineOfflineVips(ircClient *twitch.IRCClient, apiClient *twitch.ApiClient, channelName string) ([]string, []string, error) {
 	userLogins, err := ircClient.Userlist(channelName)
 	if err != nil {
 		return nil, nil, err

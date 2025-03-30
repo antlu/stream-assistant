@@ -1,26 +1,44 @@
 package twitch
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
+	"log"
+	"time"
 
 	"github.com/gempir/go-twitch-irc/v4"
 )
 
 type IRCClient struct {
 	*twitch.Client
-	tokenManager *TokenManager
 }
 
-func NewIRCClient(username string, tokenManager *TokenManager) (*IRCClient, error) {
-	accessToken, err := tokenManager.getValidAccessToken(username)
-	if err != nil {
-		return nil, fmt.Errorf("error getting valid access token: %w", err)
+func NewIRCClient(channelName string, tokenManager *TokenManager) (*IRCClient, error) {
+	client := IRCClient{twitch.NewClient(channelName, "")}
+	go client.waitForToken(channelName, tokenManager)
+	return &client, nil
+}
+
+func (c IRCClient) waitForToken(channelName string, tokenManager *TokenManager) {
+	var (
+		accessToken string
+		err error
+	)
+
+	for {
+		accessToken, _, err = tokenManager.ensureValidTokens(channelName)
+		if err == nil {
+			c.SetIRCToken(fmt.Sprintf("oauth:%s", accessToken))
+			break
+		}
+
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Printf("IRC: Waiting for %s authorization", channelName)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+
+		log.Printf("Error getting token: %v", err)
 	}
-
-	ircClient := twitch.NewClient(username, fmt.Sprintf("oauth:%s", accessToken))
-	return &IRCClient{Client: ircClient, tokenManager: tokenManager}, nil
-}
-
-func (c *IRCClient) RefreshToken() {
-	c.tokenManager.getValidAccessToken(c.ircUser)
 }

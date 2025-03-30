@@ -24,3 +24,10 @@ func OpenDB() *sql.DB {
 
 	return db
 }
+
+func doesChannelExist(db *sql.DB, id string) (bool, error) {
+	var exists bool
+	query := "SELECT EXISTS (SELECT 1 FROM channels WHERE id = ?)"
+	err := db.QueryRow(query, id).Scan(&exists)
+	return exists, err
+}

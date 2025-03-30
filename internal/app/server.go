@@ -3,7 +3,6 @@ package app
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -22,15 +21,15 @@ func generateSecret() string {
 
 func prepareTwitchAuthQueryParams() url.Values {
 	params := url.Values{}
-	params.Add("client_id", "jmaoofuyr1c4v8lqzdejzfppdj5zym")
-	params.Add("redirect_uri", "http://localhost:3000/auth")
+	params.Add("client_id", os.Getenv("SA_CLIENT_ID"))
+	params.Add("redirect_uri", os.Getenv("SA_REDIRECT_URI"))
 	params.Add("response_type", "code")
 	params.Add("scope", "moderation:read moderator:read:chatters channel:manage:vips chat:edit chat:read")
 	params.Add("state", generateSecret())
 	return params
 }
 
-func StartWebServer(tokenManager *twitch.TokenManager) {
+func StartWebServer(app *App, tokenManager *twitch.TokenManager) {
 	tmpl, err := template.ParseFiles("templates/index.html")
 	if err != nil {
 		log.Fatal(err)
@@ -47,6 +46,7 @@ func StartWebServer(tokenManager *twitch.TokenManager) {
 			return
 		}
 		session.Options.MaxAge = 0
+		session.Options.SameSite = http.SameSiteLaxMode
 
 		twitchAuthQueryParams := prepareTwitchAuthQueryParams()
 		session.Values["state"] = twitchAuthQueryParams.Get("state")
@@ -70,9 +70,8 @@ func StartWebServer(tokenManager *twitch.TokenManager) {
 			return
 		}
 
-		// TODO:DELETE !=
 		if r.URL.Query().Get("state") != session.Values["state"] {
-			http.Error(w, fmt.Sprintf("Invalid state %s != %s", session.Values["state"], r.URL.Query().Get("state")), http.StatusBadRequest)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
@@ -88,7 +87,35 @@ func StartWebServer(tokenManager *twitch.TokenManager) {
 			return
 		}
 
-		go tokenManager.CreateOrUpdateStoreRecord(tokensData)
+		go func() {
+			apiClient, err := twitch.NewApiClient(tokensData.AccessToken, tokensData.RefreshToken)
+			if err != nil {
+				log.Print("Error creating a one-time API client")
+				return
+			}
+
+			usersResp, err := apiClient.GetUsers(nil)
+			if err != nil {
+				log.Print("Error getting user info")
+				return
+			}
+
+			userData := usersResp.Data.Users[0]
+
+			err = tokenManager.CreateOrUpdateStoreRecord(userData.ID, userData.Login, tokensData.AccessToken, tokensData.RefreshToken)
+			if err != nil {
+				log.Print(err)
+				return
+			}
+
+			err = app.addChannel(userData.ID, userData.Login)
+			if err != nil {
+				log.Print(err)
+				return
+			}
+
+			app.ircClient.Join(userData.Login)
+		}()
 
 		session.AddFlash("Authorized")
 		err = session.Save(r, w)

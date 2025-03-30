@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"maps"
@@ -16,7 +15,6 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/nicklaw5/helix/v2"
 
-	types "github.com/antlu/stream-assistant/internal"
 	"github.com/antlu/stream-assistant/internal/app"
 	"github.com/antlu/stream-assistant/internal/crypto"
 	"github.com/antlu/stream-assistant/internal/twitch"
@@ -28,19 +26,17 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	app.StartWebServer()
-
 	db := app.OpenDB()
 	defer db.Close()
+
 	tokenManager := twitch.NewTokenManager(db, crypto.Cipher(os.Getenv("SA_SECURE_KEY")))
+
 	botName := os.Getenv("SA_BOT_NAME")
 
-	apiClient, err := twitch.NewApiClient(botName, tokenManager)
+	apiClient, err := twitch.NewApiClientWithChannel(botName, tokenManager)
 	if err != nil {
 		log.Fatal("Error creating API client")
 	}
-
-	channels := app.PrepareChannels(apiClient)
 
 	ircClient, err := twitch.NewIRCClient(botName, tokenManager)
 	if err != nil {
@@ -48,13 +44,24 @@ func main() {
 	}
 	ircClient.Capabilities = append(ircClient.Capabilities, twitchIRC.MembershipCapability)
 
+	appInstance := app.New(ircClient, apiClient, db)
+
+	app.StartWebServer(appInstance, tokenManager)
+
+	apiClient.WaitUntilReady(10 * time.Second)
+
+	channels, err := appInstance.PrepareChannels()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	apiClientForChannel := make(map[string]*twitch.ApiClient)
 
 	ircClient.OnSelfJoinMessage(func(message twitchIRC.UserJoinMessage) {
 		go func() {
 			channelName := message.Channel
 			log.Printf("Joined %s", channelName)
-			apiClient, err := twitch.NewApiClientWithChannel(channelName, channels[channelName].UAT)
+			apiClient, err := twitch.NewApiClientWithChannel(channelName, tokenManager)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -98,16 +105,16 @@ func main() {
 			}
 
 			for _, moderator := range resp.Data.Moderators {
-				channel.Raffle.Ineligible[moderator.UserID] = types.RaffleParticipant{
+				channel.Raffle.Ineligible[moderator.UserID] = app.RaffleParticipant{
 					ID:   moderator.UserID,
 					Name: moderator.UserName,
 				}
 			}
-			channel.Raffle.Ineligible[msgAuthorID] = types.RaffleParticipant{
+			channel.Raffle.Ineligible[msgAuthorID] = app.RaffleParticipant{
 				ID:   msgAuthorID,
 				Name: msgAuthorName,
 			}
-			ircClient.Say(channelName, fmt.Sprintf("Розыгрыш начался! Для участия отправь в чат %s", channel.Raffle.EnrollMsg))
+			ircClient.Say(channelName, fmt.Sprintf("The raffle begins! Send %s to the chat to participate", channel.Raffle.EnrollMsg))
 
 			time.AfterFunc(30*time.Second, func() {
 				channel.Raffle.IsActive = false
@@ -130,8 +137,8 @@ func main() {
 				}
 
 				var (
-					loser  types.RaffleParticipant
-					winner types.RaffleParticipant
+					loser  app.RaffleParticipant
+					winner app.RaffleParticipant
 				)
 
 				for _, participantID := range participantIDs {
@@ -145,7 +152,7 @@ func main() {
 				}
 
 				if winner.ID == "" {
-					log.Print("No one won")
+					log.Print("No one has won")
 					return
 				}
 
@@ -183,15 +190,15 @@ func main() {
 							log.Print(err)
 						}
 
-						loser = types.RaffleParticipant{ID: users[0].ID, Name: users[0].DisplayName}
+						loser = app.RaffleParticipant{ID: users[0].ID, Name: users[0].DisplayName}
 					}
 				}
 
 				unvipMsg := ""
 				if loser.ID != "" {
-					unvipMsg = fmt.Sprintf("%s потерял випку. ", loser.Name)
+					unvipMsg = fmt.Sprintf("%s has lost their status. ", loser.Name)
 				}
-				resultMsg := fmt.Sprintf("%sНовый вип — %s!", unvipMsg, winner.Name)
+				resultMsg := fmt.Sprintf("%sNew VIP — %s!", unvipMsg, winner.Name)
 				ircClient.Say(channelName, resultMsg)
 			})
 
@@ -203,7 +210,7 @@ func main() {
 				return
 			}
 
-			channel.Raffle.Participants[msgAuthorID] = types.RaffleParticipant{
+			channel.Raffle.Participants[msgAuthorID] = app.RaffleParticipant{
 				ID:   msgAuthorID,
 				Name: msgAuthorName,
 			}
@@ -215,12 +222,8 @@ func main() {
 
 	app.StartTwitchWSCommunication(apiClient, channels, app.ReconnParams{})
 
-	for {
-		err = ircClient.Connect()
-		if errors.Is(err, twitchIRC.ErrLoginAuthenticationFailed) {
-			ircClient.SetIRCToken()
-		}	else if err != nil {
-			log.Fatal("Error connecting to Twitch: %v", err)
-		}
+	err = ircClient.Connect()
+	if err != nil {
+		log.Fatalf("Error connecting to Twitch: %v", err)
 	}
 }

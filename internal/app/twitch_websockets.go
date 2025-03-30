@@ -8,7 +8,7 @@ import (
 	"github.com/lxzan/gws"
 	"github.com/nicklaw5/helix/v2"
 
-	"github.com/antlu/stream-assistant/internal"
+	"github.com/antlu/stream-assistant/internal/twitch"
 )
 
 // TODO: split into different types
@@ -73,8 +73,8 @@ type ReconnParams struct {
 }
 
 type handler struct {
-	*helix.Client
-	channels     types.ChannelsDict
+	Client       *twitch.ApiClient
+	channels     ChannelsDict
 	closeOldConn func()
 }
 
@@ -152,7 +152,7 @@ func (h handler) handleNotification(event PayloadEvent, subType string) {
 	}
 }
 
-func createSubRequester(client *helix.Client, sessionID string) func(string, string) {
+func createSubRequester(client *twitch.ApiClient, sessionID string) func(string, string) {
 	return func(channelID, subType string) {
 		_, err := client.CreateEventSubSubscription(&helix.EventSubSubscription{
 			Type:      subType,
@@ -166,7 +166,7 @@ func createSubRequester(client *helix.Client, sessionID string) func(string, str
 	}
 }
 
-func StartTwitchWSCommunication(apiClient *helix.Client, channels types.ChannelsDict, params ReconnParams) {
+func StartTwitchWSCommunication(apiClient *twitch.ApiClient, channels ChannelsDict, params ReconnParams) {
 	serverAddr := "wss://eventsub.wss.twitch.tv/ws"
 	if params.ReconnectUrl != "" {
 		serverAddr = params.ReconnectUrl

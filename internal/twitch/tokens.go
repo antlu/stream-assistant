@@ -27,10 +27,11 @@ type tokens struct {
 }
 
 type TokenManager struct {
-	sync.RWMutex
+	mu sync.RWMutex
 	cache  map[string]tokens
 	store  *sql.DB
 	cipher crypto.Cipher
+	refreshQueue map[string]chan(tokens)
 }
 
 func NewTokenManager(store *sql.DB, cipher crypto.Cipher) *TokenManager {
@@ -38,6 +39,7 @@ func NewTokenManager(store *sql.DB, cipher crypto.Cipher) *TokenManager {
 		store:  store,
 		cache:  make(map[string]tokens),
 		cipher: cipher,
+		refreshQueue: make(map[string]chan(tokens)),
 	}
 }
 
@@ -80,9 +82,9 @@ func (tm *TokenManager) getTokens(channelName string) (string, string, bool, err
 }
 
 func (tm *TokenManager) updateCache(channelName, accessToken, refreshToken string) {
-	tm.Lock()
+	tm.mu.Lock()
 	tm.cache[channelName] = tokens{accessToken, refreshToken}
-	tm.Unlock()
+	tm.mu.Unlock()
 }
 
 func (tm *TokenManager) readFromStore(channelName string) (string, string, error) {
@@ -152,6 +154,22 @@ func (tm *TokenManager) ensureValidTokens(channelName string) (string, string, e
 		return accessToken, refreshToken, nil
 	}
 
+	tm.mu.Lock()
+	tokensCh, exists := tm.refreshQueue[channelName]
+	if exists {
+		tm.mu.Unlock()
+		tokens := <-tokensCh
+		tm.mu.Lock()
+		delete(tm.refreshQueue, channelName)
+		tm.mu.Unlock()
+		return tokens.accessToken, tokens.refreshToken, nil
+	}
+
+	tokensCh = make(chan tokens)
+	tm.refreshQueue[channelName] = tokensCh
+	tm.mu.Unlock()
+	defer close(tokensCh)
+
 	accessToken, refreshToken, err = tm.refreshTokens(refreshToken)
 	if err != nil {
 		return "", "", fmt.Errorf("error refreshing token: %w", err)
@@ -161,6 +179,9 @@ func (tm *TokenManager) ensureValidTokens(channelName string) (string, string, e
 	if err != nil {
 		return "", "", fmt.Errorf("error updating token store: %w", err)
 	}
+
+	tokensCh <- tokens{accessToken, refreshToken}
+
 	return accessToken, refreshToken, nil
 }
 

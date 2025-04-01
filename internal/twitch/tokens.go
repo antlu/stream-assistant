@@ -137,7 +137,25 @@ func (tm *TokenManager) updateStorage(channelName, accessToken, refreshToken str
 	return tm.updateStoreRecord(channelName, accessToken, refreshToken)
 }
 
-func (tm *TokenManager) ensureValidTokens(channelName string) (string, string, error) {
+func (tm *TokenManager) ensureValidTokens(channelName string) (accessToken, refreshToken string, _ error) {
+	tm.mu.Lock()
+	tokensCh, exists := tm.refreshQueue[channelName]
+	if exists {
+		tm.mu.Unlock()
+		tokens := <-tokensCh
+		tm.mu.Lock()
+		delete(tm.refreshQueue, channelName)
+		tm.mu.Unlock()
+		return tokens.accessToken, tokens.refreshToken, nil
+	}
+
+	tokensCh = make(chan tokens)
+	tm.refreshQueue[channelName] = tokensCh
+	tm.mu.Unlock()
+	defer func() {
+		tokensCh <- tokens{accessToken, refreshToken}
+	}()
+
 	accessToken, refreshToken, cached, err := tm.getTokens(channelName)
 	if err != nil {
 		return "", "", fmt.Errorf("error getting access token: %w", err)
@@ -154,22 +172,6 @@ func (tm *TokenManager) ensureValidTokens(channelName string) (string, string, e
 		return accessToken, refreshToken, nil
 	}
 
-	tm.mu.Lock()
-	tokensCh, exists := tm.refreshQueue[channelName]
-	if exists {
-		tm.mu.Unlock()
-		tokens := <-tokensCh
-		tm.mu.Lock()
-		delete(tm.refreshQueue, channelName)
-		tm.mu.Unlock()
-		return tokens.accessToken, tokens.refreshToken, nil
-	}
-
-	tokensCh = make(chan tokens)
-	tm.refreshQueue[channelName] = tokensCh
-	tm.mu.Unlock()
-	defer close(tokensCh)
-
 	accessToken, refreshToken, err = tm.refreshTokens(refreshToken)
 	if err != nil {
 		return "", "", fmt.Errorf("error refreshing token: %w", err)
@@ -179,8 +181,6 @@ func (tm *TokenManager) ensureValidTokens(channelName string) (string, string, e
 	if err != nil {
 		return "", "", fmt.Errorf("error updating token store: %w", err)
 	}
-
-	tokensCh <- tokens{accessToken, refreshToken}
 
 	return accessToken, refreshToken, nil
 }
@@ -256,5 +256,6 @@ func validateToken(accessToken string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
 	return resp.StatusCode == http.StatusOK, nil
 }

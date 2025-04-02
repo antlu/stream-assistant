@@ -33,7 +33,7 @@ func main() {
 
 	botName := os.Getenv("SA_BOT_NAME")
 
-	apiClient, err := twitch.NewApiClientWithChannel(botName, tokenManager)
+	apiClient, err := twitch.NewApiClient(botName, tokenManager)
 	if err != nil {
 		log.Fatal("Error creating API client")
 	}
@@ -48,8 +48,6 @@ func main() {
 
 	app.StartWebServer(appInstance, tokenManager)
 
-	apiClient.WaitUntilReady(10 * time.Second)
-
 	channels, err := appInstance.PrepareChannels()
 	if err != nil {
 		log.Fatal(err)
@@ -61,7 +59,7 @@ func main() {
 		go func() {
 			channelName := message.Channel
 			log.Printf("Joined %s", channelName)
-			apiClient, err := twitch.NewApiClientWithChannel(channelName, tokenManager)
+			apiClient, err := twitch.NewApiClient(channelName, tokenManager)
 			if err != nil {
 				log.Fatal(err)
 			}

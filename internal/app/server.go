@@ -11,6 +11,7 @@ import (
 
 	"github.com/antlu/stream-assistant/internal/twitch"
 	"github.com/gorilla/sessions"
+	"github.com/nicklaw5/helix/v2"
 )
 
 func generateSecret() string {
@@ -88,7 +89,11 @@ func StartWebServer(app *App, tokenManager *twitch.TokenManager) {
 		}
 
 		go func() {
-			apiClient, err := twitch.NewApiClient(tokensData.AccessToken, tokensData.RefreshToken)
+			apiClient, err := helix.NewClient(&helix.Options{
+				ClientID:        os.Getenv("SA_CLIENT_ID"),
+				ClientSecret:    os.Getenv("SA_CLIENT_SECRET"),
+				UserAccessToken: tokensData.AccessToken,
+			})
 			if err != nil {
 				log.Print("Error creating a one-time API client")
 				return

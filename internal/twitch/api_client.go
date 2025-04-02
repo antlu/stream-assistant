@@ -3,6 +3,7 @@ package twitch
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -49,7 +50,7 @@ func (ac ApiClient) hasTokens() bool {
 	return ac.GetUserAccessToken() != "" && ac.GetRefreshToken() != ""
 }
 
-func (ac ApiClient) WaitUntilReady(duration time.Duration) {
+func (ac ApiClient) waitUntilReady(duration time.Duration) {
 	for !ac.hasTokens() {
 		time.Sleep(duration)
 	}
@@ -110,4 +111,18 @@ func (ac ApiClient) GetVips(channelName string) ([]helix.ChannelVips, error) {
 	}
 
 	return resp.Data.ChannelsVips, nil
+}
+
+func (ac ApiClient) GetLiveStreams(logins []string) (map[string]bool, error) {
+	streamsResp, err := ac.GetStreams(&helix.StreamsParams{UserLogins: logins})
+	if err != nil {
+		return nil, fmt.Errorf("error getting streams info: %v", err)
+	}
+
+	streamData := make(map[string]bool)
+	for _, stream := range streamsResp.Data.Streams {
+		streamData[stream.UserLogin] = true
+	}
+
+	return streamData, nil
 }

@@ -111,12 +111,12 @@ func (tm *TokenManager) readFromStore(channelName string) (string, string, error
 func (tm *TokenManager) updateStoreRecord(channelName, accessToken, refreshToken string) error {
 	accessToken, err := tm.cipher.Encrypt(accessToken)
 	if err != nil {
-		return fmt.Errorf("error encrypting access token: %w", err)
+		return fmt.Errorf("error encrypting access token: %v", err)
 	}
 
 	refreshToken, err = tm.cipher.Encrypt(refreshToken)
 	if err != nil {
-		return fmt.Errorf("error encrypting refresh token: %w", err)
+		return fmt.Errorf("error encrypting refresh token: %v", err)
 	}
 
 	res, err := tm.store.Exec(
@@ -125,7 +125,7 @@ func (tm *TokenManager) updateStoreRecord(channelName, accessToken, refreshToken
 	)
 	affected, _ := res.RowsAffected()
 	if err != nil || affected == 0 {
-		return fmt.Errorf("error updating token store: %w", err)
+		return fmt.Errorf("error updating token store: %v", err)
 	}
 
 	log.Printf("Updated tokens for %s", channelName)

@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/nicklaw5/helix/v2"
-
 	"github.com/antlu/stream-assistant/internal/twitch"
 )
 
@@ -29,33 +27,18 @@ func New(ircClient *twitch.IRCClient, apiClient *twitch.ApiClient, db *sql.DB) *
 		channels:  make(ChannelsDict),
 	}
 }
-
-func (a *App) fetchStreamData(logins []string) (map[string]bool, error) {
-	streamsResp, err := a.apiClient.GetStreams(&helix.StreamsParams{UserLogins: logins})
-	if err != nil {
-		return nil, fmt.Errorf("error getting streams info: %w", err)
-	}
-
-	streamData := make(map[string]bool)
-	for _, stream := range streamsResp.Data.Streams {
-		streamData[stream.UserLogin] = true
-	}
-
-	return streamData, nil
-}
-
 func (a *App) PrepareChannels() (ChannelsDict, error) {
 	var channelNames []string
 
 	rows, err := a.db.Query("SELECT id, login FROM channels")
 	if err != nil {
-		return nil, fmt.Errorf("error querying channels: %w", err)
+		return nil, fmt.Errorf("error querying channels: %v", err)
 	}
 
 	for rows.Next() {
 		var id, login string
 		if err := rows.Scan(&id, &login); err != nil {
-			return nil, fmt.Errorf("error scanning channel login: %w", err)
+			return nil, fmt.Errorf("error scanning channel login: %v", err)
 		}
 
 		a.channels[login] = a.makeChannelBase(channelParams{id: id, name: login})
@@ -63,12 +46,12 @@ func (a *App) PrepareChannels() (ChannelsDict, error) {
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating rows: %w", err)
+		return nil, fmt.Errorf("error iterating rows: %v", err)
 	}
 
-	streamData, err := a.fetchStreamData(channelNames)
+	streamData, err := a.apiClient.GetLiveStreams(channelNames)
 	if err != nil {
-		return nil, fmt.Errorf("error fetching streams data: %w", err)
+		return nil, fmt.Errorf("error fetching streams data: %v", err)
 	}
 	for login, isLive := range streamData {
 		a.channels[login].IsLive = isLive
@@ -80,9 +63,9 @@ func (a *App) PrepareChannels() (ChannelsDict, error) {
 func (a *App) addChannel(id, name string) error {
 	a.channels[name] = a.makeChannelBase(channelParams{id: id, name: name})
 
-	streamData, err := a.fetchStreamData([]string{name})
+	streamData, err := a.apiClient.GetLiveStreams([]string{name})
 	if err != nil {
-		return fmt.Errorf("error fetching stream data: %w", err)
+		return fmt.Errorf("error fetching stream data: %v", err)
 	}
 	a.channels[name].IsLive = streamData[name]
 

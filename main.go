@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"maps"
@@ -216,12 +217,22 @@ func main() {
 		}
 	})
 
+	ircClient.OnReconnectMessage(func(twitchIRC.ReconnectMessage) {
+		log.Print("IRC reconnect requested")
+		err := ircClient.Reconnect(botName, tokenManager)
+		if err != nil {
+			log.Fatal(err)
+		}
+	})
+
 	ircClient.Join(slices.Collect(maps.Keys(channels))...)
 
 	app.StartTwitchWSCommunication(apiClient, channels, app.ReconnParams{})
 
 	err = ircClient.Connect()
-	if err != nil {
+	if errors.Is(err, twitchIRC.ErrLoginAuthenticationFailed) {
+		ircClient.Reconnect(botName, tokenManager)
+	}	else if err != nil {
 		log.Fatalf("Error connecting to Twitch: %v", err)
 	}
 }

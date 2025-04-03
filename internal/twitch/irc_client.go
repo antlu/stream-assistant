@@ -20,7 +20,7 @@ func NewIRCClient(channelName string, tokenManager *TokenManager) (*IRCClient, e
 	return &client, nil
 }
 
-func (c IRCClient) waitForToken(channelName string, tokenManager *TokenManager) {
+func (c IRCClient) waitForToken(channelName string, tokenManager *TokenManager) error {
 	var (
 		accessToken string
 		err error
@@ -40,5 +40,17 @@ func (c IRCClient) waitForToken(channelName string, tokenManager *TokenManager) 
 		}
 
 		log.Printf("Error getting token: %v", err)
+		return err
 	}
+
+	return nil
+}
+
+func (c IRCClient) Reconnect(channelName string, tokenManager *TokenManager) error {
+	err := c.waitForToken(channelName, tokenManager)
+	if err != nil {
+		return err
+	}
+
+	return c.Connect()
 }

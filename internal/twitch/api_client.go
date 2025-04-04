@@ -45,6 +45,15 @@ func (ac ApiClient) waitUntilReady() error {
 	}
 }
 
+func (ac ApiClient) IsReady() bool {
+	select {
+	case <-ac.ready:
+		return true
+	default:
+		return false
+	}
+}
+
 func (ac ApiClient) getTokens(channelName string, tokenManager *TokenManager) {
 	var (
 		accessToken, refreshToken string
@@ -104,6 +113,14 @@ func (ac ApiClient) GetVips(channelName string) ([]helix.ChannelVips, error) {
 	}
 
 	return resp.Data.ChannelsVips, nil
+}
+
+func (ac ApiClient) GetModerators(channelId string) (*helix.ModeratorsResponse, error) {
+	if err := ac.waitUntilReady(); err != nil {
+		return nil, err
+	}
+
+	return ac.Client.GetModerators(&helix.GetModeratorsParams{BroadcasterID: channelId})
 }
 
 func (ac ApiClient) GetLiveStreams(logins []string) (map[string]bool, error) {

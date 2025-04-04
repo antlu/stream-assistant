@@ -97,9 +97,9 @@ func main() {
 			channel.Raffle.EnrollMsg = strings.TrimSpace(strings.TrimPrefix(message.Message, prefix))
 			channel.Raffle.IsActive = true
 
-			resp, err := apiClient.GetModerators(&helix.GetModeratorsParams{BroadcasterID: channel.ID})
+			resp, err := apiClient.GetModerators(channel.ID)
 			if err != nil || resp.StatusCode != http.StatusOK {
-				log.Print("Error getting moderators")
+				log.Printf("Error getting moderators: %v, status: %d", err, resp.StatusCode)
 				return
 			}
 

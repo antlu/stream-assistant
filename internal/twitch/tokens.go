@@ -149,7 +149,7 @@ func (tm *TokenManager) ensureValidTokens(channelName string) (accessToken, refr
 		return tokens.accessToken, tokens.refreshToken, nil
 	}
 
-	tokensCh = make(chan tokens)
+	tokensCh = make(chan tokens, 1)
 	tm.refreshQueue[channelName] = tokensCh
 	tm.mu.Unlock()
 	defer func() {

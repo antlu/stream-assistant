@@ -51,6 +51,6 @@ func (c IRCClient) Reconnect(channelName string, tokenManager *TokenManager) err
 	if err != nil {
 		return err
 	}
-
+	c.Disconnect()
 	return c.Connect()
 }

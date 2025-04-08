@@ -65,11 +65,13 @@ func main() {
 				log.Fatal(err)
 			}
 			apiClientForChannel[channelName] = apiClient
-			app.WriteInitialDataToUsersFile(channelName, apiClient)
+
+			channel := channels[channelName]
+			app.WriteInitialData(db, channel.ID, apiClient)
 
 			for {
 				time.Sleep(5 * time.Minute)
-				if channels[channelName].IsLive {
+				if channel.IsLive {
 					onlineVips, offlineVips, err := app.GetOnlineOfflineVips(ircClient, apiClient, channelName)
 					if err != nil {
 						log.Print(err)

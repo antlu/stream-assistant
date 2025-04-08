@@ -2,6 +2,7 @@ package app
 
 import (
 	"bufio"
+	"database/sql"
 	"errors"
 	"io"
 	"log"
@@ -94,6 +95,50 @@ func WriteInitialDataToUsersFile(channelName string, apiClient *twitch.ApiClient
 	}
 
 	log.Printf("Wrote initial data for %s", channelName)
+}
+
+func WriteInitialData(db *sql.DB, channelId string, apiClient *twitch.ApiClient) (bool, error) {
+	exists, err := recordExists(db, "channel_viewers", "channel_id", channelId)
+	if err != nil || exists {
+		return false, err
+	}
+
+	channelVips, err := apiClient.GetChannelVips(channelId)
+	if err != nil {
+		return false, err
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	viewersValues := make([][]any, len(channelVips))
+	chanViewersValues := make([][]any, len(channelVips))
+
+	for i, channelVip := range channelVips {
+		viewersValues[i] = []any{channelVip.UserID, channelVip.UserLogin, channelVip.UserName}
+		chanViewersValues[i] = []any{channelId, channelVip.UserID}
+	}
+
+	err = bulkInsert(db, "viewers", []string{"id", "login", "username"}, viewersValues)
+	if err != nil {
+		return false, err
+	}
+
+	err = bulkInsert(db, "channel_viewers", []string{"channel_id", "viewer_id"}, chanViewersValues)
+	if err != nil {
+		return false, err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return false, err
+	}
+
+	log.Printf("Wrote initial data for %s", channelId)
+	return true, nil
 }
 
 func GetFirstUserFromFile(channelName string) string {

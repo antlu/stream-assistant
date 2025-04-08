@@ -219,14 +219,6 @@ func main() {
 		}
 	})
 
-	ircClient.OnReconnectMessage(func(twitchIRC.ReconnectMessage) {
-		log.Print("IRC reconnect requested")
-		err := ircClient.Reconnect(botName, tokenManager)
-		if err != nil {
-			log.Fatal(err)
-		}
-	})
-
 	ircClient.Join(slices.Collect(maps.Keys(channels))...)
 
 	app.StartTwitchWSCommunication(apiClient, channels, app.ReconnParams{})

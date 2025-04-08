@@ -94,18 +94,17 @@ func (ac ApiClient) GetUsersInfo(names ...string) ([]helix.User, error) {
 	return resp.Data.Users, nil
 }
 
-func (ac ApiClient) GetVips(channelName string) ([]helix.ChannelVips, error) {
-	usersInfo, err := ac.GetUsersInfo(channelName)
-	if err != nil {
+func (ac ApiClient) GetChannelVips(channelId string) ([]helix.ChannelVips, error) {
+	if err := ac.waitUntilReady(); err != nil {
 		return nil, err
 	}
 
-	resp, err := ac.GetChannelVips(&helix.GetChannelVipsParams{
-		BroadcasterID: usersInfo[0].ID,
+	resp, err := ac.Client.GetChannelVips(&helix.GetChannelVipsParams{
+		BroadcasterID: channelId,
 		First:         100,
 	})
 	if err != nil || resp.StatusCode != http.StatusOK {
-		log.Printf("Error getting VIPs of %s", channelName)
+		log.Printf("Error getting VIPs of %s", channelId)
 		if err == nil {
 			err = errors.New(resp.ErrorMessage)
 		}
@@ -115,12 +114,21 @@ func (ac ApiClient) GetVips(channelName string) ([]helix.ChannelVips, error) {
 	return resp.Data.ChannelsVips, nil
 }
 
-func (ac ApiClient) GetModerators(channelId string) (*helix.ModeratorsResponse, error) {
+func (ac ApiClient) GetModerators(channelId string) ([]helix.Moderator, error) {
 	if err := ac.waitUntilReady(); err != nil {
 		return nil, err
 	}
 
-	return ac.Client.GetModerators(&helix.GetModeratorsParams{BroadcasterID: channelId})
+	resp, err := ac.Client.GetModerators(&helix.GetModeratorsParams{BroadcasterID: channelId})
+	if err != nil || resp.StatusCode != http.StatusOK {
+		log.Printf("Error getting moderators of %s: %v, status: %d", channelId, err, resp.StatusCode)
+		if err == nil {
+			err = errors.New(resp.ErrorMessage)
+		}
+		return nil, err
+	}
+
+	return resp.Data.Moderators, nil
 }
 
 func (ac ApiClient) GetLiveStreams(logins []string) (map[string]bool, error) {

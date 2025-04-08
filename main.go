@@ -97,13 +97,13 @@ func main() {
 			channel.Raffle.EnrollMsg = strings.TrimSpace(strings.TrimPrefix(message.Message, prefix))
 			channel.Raffle.IsActive = true
 
-			resp, err := apiClient.GetModerators(channel.ID)
-			if err != nil || resp.StatusCode != http.StatusOK {
-				log.Printf("Error getting moderators: %v, status: %d", err, resp.StatusCode)
+			moderators, err := apiClient.GetModerators(channel.ID)
+			if err != nil {
+				log.Print(err)
 				return
 			}
 
-			for _, moderator := range resp.Data.Moderators {
+			for _, moderator := range moderators {
 				channel.Raffle.Ineligible[moderator.UserID] = app.RaffleParticipant{
 					ID:   moderator.UserID,
 					Name: moderator.UserName,
@@ -124,7 +124,7 @@ func main() {
 					participantIDs[i], participantIDs[j] = participantIDs[j], participantIDs[i]
 				})
 
-				vips, err := apiClient.GetVips(channelName)
+				vips, err := apiClient.GetChannelVips(channel.ID)
 				if err != nil {
 					log.Print(err)
 					return

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gocarina/gocsv"
+	"github.com/nicklaw5/helix/v2"
 
 	"github.com/antlu/stream-assistant/internal/twitch"
 )
@@ -97,50 +98,6 @@ func WriteInitialDataToUsersFile(channelName string, apiClient *twitch.ApiClient
 	log.Printf("Wrote initial data for %s", channelName)
 }
 
-func WriteInitialData(db *sql.DB, channelId string, apiClient *twitch.ApiClient) (bool, error) {
-	exists, err := recordExists(db, "channel_viewers", "channel_id", channelId)
-	if err != nil || exists {
-		return false, err
-	}
-
-	channelVips, err := apiClient.GetChannelVips(channelId)
-	if err != nil {
-		return false, err
-	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		return false, err
-	}
-	defer tx.Rollback()
-
-	viewersValues := make([][]any, len(channelVips))
-	chanViewersValues := make([][]any, len(channelVips))
-
-	for i, channelVip := range channelVips {
-		viewersValues[i] = []any{channelVip.UserID, channelVip.UserLogin, channelVip.UserName}
-		chanViewersValues[i] = []any{channelId, channelVip.UserID}
-	}
-
-	err = bulkInsert(db, "viewers", []string{"id", "login", "username"}, viewersValues)
-	if err != nil {
-		return false, err
-	}
-
-	err = bulkInsert(db, "channel_viewers", []string{"channel_id", "viewer_id"}, chanViewersValues)
-	if err != nil {
-		return false, err
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return false, err
-	}
-
-	log.Printf("Wrote initial data for %s", channelId)
-	return true, nil
-}
-
 func GetFirstUserFromFile(channelName string) string {
 	f, err := os.Open(filePath(channelName))
 	if err != nil {
@@ -195,26 +152,26 @@ func appendUserToFile(channelName string, userName string) {
 	}
 }
 
-func GetOnlineOfflineVips(ircClient *twitch.IRCClient, apiClient *twitch.ApiClient, channelName string) ([]string, []string, error) {
+func GetOnlineOfflineVips(ircClient *twitch.IRCClient, apiClient *twitch.ApiClient, channelName, channelId string) ([]helix.ChannelVips, []helix.ChannelVips, error) {
 	userLogins, err := ircClient.Userlist(channelName)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	vips, err := apiClient.GetVips(channelName)
+	vips, err := apiClient.GetChannelVips(channelId)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	presentVipLogins := make([]string, 0, len(vips))
-	absentVipLogins := make([]string, 0, len(vips))
+	presentVips := make([]helix.ChannelVips, 0, len(vips))
+	absentVips := make([]helix.ChannelVips, 0, len(vips))
 	for _, vip := range vips {
 		if slices.Contains(userLogins, vip.UserLogin) {
-			presentVipLogins = append(presentVipLogins, vip.UserLogin)
+			presentVips = append(presentVips, vip)
 		} else {
-			absentVipLogins = append(absentVipLogins, vip.UserLogin)
+			absentVips = append(absentVips, vip)
 		}
 	}
 
-	return presentVipLogins, absentVipLogins, nil
+	return presentVips, absentVips, nil
 }

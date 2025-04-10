@@ -1,9 +1,9 @@
 package app
 
 import (
-	"database/sql"
 	"fmt"
 
+	"github.com/antlu/stream-assistant/internal/interfaces"
 	"github.com/antlu/stream-assistant/internal/twitch"
 )
 
@@ -15,11 +15,11 @@ type channelParams struct {
 type App struct {
 	ircClient *twitch.IRCClient
 	apiClient *twitch.ApiClient
-	db        *sql.DB
+	db        interfaces.DBQueryExecCloser
 	channels  ChannelsDict
 }
 
-func New(ircClient *twitch.IRCClient, apiClient *twitch.ApiClient, db *sql.DB) *App {
+func New(ircClient *twitch.IRCClient, apiClient *twitch.ApiClient, db interfaces.DBQueryExecCloser) *App {
 	return &App{
 		ircClient: ircClient,
 		apiClient: apiClient,
@@ -34,7 +34,6 @@ func (a *App) PrepareChannels() (ChannelsDict, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error querying channels: %v", err)
 	}
-
 	for rows.Next() {
 		var id, login string
 		if err := rows.Scan(&id, &login); err != nil {

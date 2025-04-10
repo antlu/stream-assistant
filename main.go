@@ -67,16 +67,22 @@ func main() {
 			apiClientForChannel[channelName] = apiClient
 
 			channel := channels[channelName]
-			app.WriteInitialData(db, channel.ID, apiClient)
+			_, err = db.WriteInitialData(channel.ID, apiClient)
+			if err != nil {
+				log.Fatal(err)
+			}
 
 			for {
 				time.Sleep(5 * time.Minute)
 				if channel.IsLive {
-					onlineVips, offlineVips, err := app.GetOnlineOfflineVips(ircClient, apiClient, channelName)
+					onlineVips, offlineVips, err := app.GetOnlineOfflineVips(ircClient, apiClient, channelName, channel.ID)
 					if err != nil {
 						log.Print(err)
 					} else {
-						app.UpdateUsersFile(channelName, onlineVips, offlineVips)
+						err = db.UpdatePresenceData(channelName, onlineVips, offlineVips)
+						if err != nil {
+							log.Print(err)
+						}
 					}
 				}
 			}

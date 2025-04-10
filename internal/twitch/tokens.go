@@ -1,7 +1,6 @@
 package twitch
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/antlu/stream-assistant/internal/crypto"
+	"github.com/antlu/stream-assistant/internal/interfaces"
 )
 
 type tokensData struct {
@@ -27,19 +27,19 @@ type tokens struct {
 }
 
 type TokenManager struct {
-	mu sync.RWMutex
-	cache  map[string]tokens
-	store  *sql.DB
-	cipher crypto.Cipher
-	refreshQueue map[string]chan(tokens)
+	mu           sync.RWMutex
+	cache        map[string]tokens
+	store        interfaces.DBQueryExecCloser
+	cipher       crypto.Cipher
+	refreshQueue map[string]chan (tokens)
 }
 
-func NewTokenManager(store *sql.DB, cipher crypto.Cipher) *TokenManager {
+func NewTokenManager(store interfaces.DBQueryExecCloser, cipher crypto.Cipher) *TokenManager {
 	return &TokenManager{
-		store:  store,
-		cache:  make(map[string]tokens),
-		cipher: cipher,
-		refreshQueue: make(map[string]chan(tokens)),
+		store:        store,
+		cache:        make(map[string]tokens),
+		cipher:       cipher,
+		refreshQueue: make(map[string]chan (tokens)),
 	}
 }
 

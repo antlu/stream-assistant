@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"slices"
 	"strings"
 	"time"
 
@@ -14,11 +13,49 @@ import (
 	"github.com/nicklaw5/helix/v2"
 )
 
-const dbPath = "db.sqlite3"
+type upsertStrategy int
+
+const (
+	upsertNothing upsertStrategy = iota
+	upsertUpdate
+)
+
+type upsertParams struct {
+	strategy upsertStrategy
+	colVal   map[string]string
+}
+
+func newUpsertParams(strategy upsertStrategy, colVal map[string]string) (upsertParams, error) {
+	if strategy == upsertUpdate && colVal == nil {
+		return upsertParams{}, errors.New("no columns and values provided for update")
+	}
+
+	return upsertParams{strategy, colVal}, nil
+}
+
+func (up upsertParams) upsertClause() string {
+	clause := "ON CONFLICT DO "
+
+	switch up.strategy {
+	case upsertUpdate:
+		colValPairs := make([]string, 0, len(up.colVal))
+		for k, v := range up.colVal {
+			colValPairs = append(colValPairs, fmt.Sprintf("%s = %s"), k, v)
+		}
+		clause += fmt.Sprintf("UPDATE SET %s", strings.Join(colValPairs, ","))
+	case upsertNothing:
+		fallthrough
+	default:
+		clause += "NOTHING"
+	}
+	return clause
+}
 
 type database struct {
 	*sql.DB
 }
+
+const dbPath = "db.sqlite3"
 
 func OpenDB() *database {
 	db, err := sql.Open("sqlite3", dbPath)
@@ -86,11 +123,16 @@ func (db database) WriteInitialData(channelId string, apiClient *twitch.ApiClien
 		chanViewersValues[i] = []any{channelId, vip.UserID}
 	}
 
-	if err := db.bulkInsert("viewers", []string{"id", "login", "username"}, viewersValues); err != nil {
+	upsert, err := newUpsertParams(upsertNothing, nil)
+	if err != nil {
 		return false, err
 	}
 
-	if err := db.bulkInsert("channel_viewers", []string{"channel_id", "viewer_id"}, chanViewersValues); err != nil {
+	if err := db.bulkInsert("viewers", []string{"id", "login", "username"}, viewersValues, upsert); err != nil {
+		return false, err
+	}
+
+	if err := db.bulkInsert("channel_viewers", []string{"channel_id", "viewer_id"}, chanViewersValues, upsert); err != nil {
 		return false, err
 	}
 
@@ -103,47 +145,27 @@ func (db database) WriteInitialData(channelId string, apiClient *twitch.ApiClien
 }
 
 func (db database) UpdatePresenceData(channelId string, onlineVips, offlineVips []helix.ChannelVips) error {
-	var viewersValues, chanViewersValues [][]any
-	var dbViewerIds []string
-
-	rows, err := db.Query("SELECT id FROM viewers")
-	if err != nil {
-		return err
-	}
-	for rows.Next() {
-		var viewerId string
-		if err := rows.Scan(&viewerId); err != nil {
-			return err
-		}
-		dbViewerIds = append(dbViewerIds, viewerId)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return err
-	}
+	var viewersValues, chanOfflineViewersValues, chanOnlineViewersValues [][]any
+	var viewerIds []string
 
 	timeNow := time.Now().UTC().Format(time.RFC3339)
 
 	for _, vip := range offlineVips {
-		if slices.Contains(dbViewerIds, vip.UserID) {
-			continue
-		}
-
 		viewersValues = append(viewersValues, []any{vip.UserID, vip.UserLogin, vip.UserName})
-		chanViewersValues = append(chanViewersValues, []any{channelId, vip.UserID, timeNow})
+		chanOfflineViewersValues = append(chanOfflineViewersValues, []any{channelId, vip.UserID, timeNow})
+		viewerIds = append(viewerIds, vip.UserID)
 	}
 
 	for _, vip := range onlineVips {
-		if slices.Contains(dbViewerIds, vip.UserID) {
-			query := "UPDATE channel_viewers SET last_seen = ? WHERE channel_id = ? AND viewer_id = ?"
-			_, err := db.Exec(query, timeNow, channelId, vip.UserID)
-			if err != nil {
-				return err
-			}
-		} else {
-			viewersValues = append(viewersValues, []any{vip.UserID, vip.UserLogin, vip.UserName})
-			chanViewersValues = append(chanViewersValues, []any{channelId, vip.UserID, timeNow})
-		}
+		viewersValues = append(viewersValues, []any{vip.UserID, vip.UserLogin, vip.UserName})
+		chanOnlineViewersValues = append(chanOnlineViewersValues, []any{channelId, vip.UserID, timeNow})
+		viewerIds = append(viewerIds, vip.UserID)
+	}
+
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(viewerIds)), ",")
+	query := fmt.Sprintf("DELETE FROM viewers WHERE id NOT IN (%s)", placeholders)
+	if _, err := db.Exec(query, toSliceOfAny(viewerIds)...); err != nil {
+		return err
 	}
 
 	tx, err := db.Begin()
@@ -152,18 +174,32 @@ func (db database) UpdatePresenceData(channelId string, onlineVips, offlineVips 
 	}
 	defer tx.Rollback()
 
-	if err := db.bulkInsert("viewers", []string{"id", "login", "username"}, viewersValues); err != nil {
+	upsertNothingParams, err := newUpsertParams(upsertNothing, nil)
+	if err != nil {
 		return err
 	}
-	if err := db.bulkInsert("channel_viewers", []string{"channel_id", "viewer_id", "last_seen"}, chanViewersValues); err != nil {
+
+	if err := db.bulkInsert("viewers", []string{"id", "login", "username"}, viewersValues, upsertNothingParams); err != nil {
+		return err
+	}
+	if err := db.bulkInsert("channel_viewers", []string{"channel_id", "viewer_id", "last_seen"}, chanOfflineViewersValues, upsertNothingParams); err != nil {
+		return err
+	}
+
+	upsertUpdateParams, err := newUpsertParams(upsertUpdate, map[string]string{"last_seen": "excluded.last_seen"})
+	if err != nil {
+		return err
+	}
+
+	if err := db.bulkInsert("channel_viewers", []string{"channel_id", "viewer_id"}, chanOnlineViewersValues, upsertUpdateParams); err != nil {
 		return err
 	}
 
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	// delete from viewers where id not in the list of ids from onlineVips and offlineVips
 
+	log.Printf("Updated viewers for %s", channelId)
 	return nil
 }
 
@@ -174,7 +210,7 @@ func (db database) recordExists(tableName, columnName, value string) (bool, erro
 	return exists, err
 }
 
-func (db database) bulkInsert(tableName string, columns []string, valGroups [][]any) error {
+func (db database) bulkInsert(tableName string, columns []string, valGroups [][]any, upsertParams upsertParams) error {
 	if len(valGroups) == 0 {
 		return nil
 	}
@@ -194,13 +230,22 @@ func (db database) bulkInsert(tableName string, columns []string, valGroups [][]
 	}
 
 	query := fmt.Sprintf(
-		"INSERT INTO %s (%s) VALUES %s",
+		"INSERT INTO %s (%s) VALUES %s %s",
 		tableName,
 		strings.Join(columns, ","),
 		strings.Join(placeholders, ","),
+		upsertParams.upsertClause(),
 	)
 
 	_, err := db.Exec(query, args...)
 
 	return err
+}
+
+func toSliceOfAny[T any](slice []T) []any {
+	result := make([]any, len(slice))
+	for i, v := range slice {
+		result[i] = v
+	}
+	return result
 }

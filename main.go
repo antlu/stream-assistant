@@ -191,13 +191,15 @@ func main() {
 					}
 					if resp.StatusCode == http.StatusConflict {
 						log.Print("No free slots. Will search who to demote")
-						userFromFile := app.GetFirstUserFromFile(channelName)
-						users, err := apiClient.GetUsersInfo(userFromFile)
+						err = db.QueryRow(`
+							SELECT viewer_id, username
+							FROM channel_viewers JOIN viewers ON viewer_id = id
+							WHERE channel_id = ?
+							ORDER BY datetime(last_seen) ASC NULLS FIRST LIMIT 1
+						`, channel.ID).Scan(&loser.ID, &loser.Name)
 						if err != nil {
 							log.Print(err)
 						}
-
-						loser = app.RaffleParticipant{ID: users[0].ID, Name: users[0].DisplayName}
 					}
 				}
 

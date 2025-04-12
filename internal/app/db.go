@@ -40,7 +40,7 @@ func (up upsertParams) upsertClause() string {
 	case upsertUpdate:
 		colValPairs := make([]string, 0, len(up.colVal))
 		for k, v := range up.colVal {
-			colValPairs = append(colValPairs, fmt.Sprintf("%s = %s"), k, v)
+			colValPairs = append(colValPairs, fmt.Sprintf("%s = %s", k, v))
 		}
 		clause += fmt.Sprintf("UPDATE SET %s", strings.Join(colValPairs, ","))
 	case upsertNothing:
@@ -98,7 +98,15 @@ func OpenDB() *database {
 	return &wrapper
 }
 
-func (db database) WriteInitialData(channelId string, apiClient *twitch.ApiClient) (bool, error) {
+func (db *database) Begin() (*transaction, error) {
+	tx, err := db.DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	return &transaction{tx}, nil
+}
+
+func (db *database) WriteInitialData(channelId string, apiClient *twitch.ApiClient) (bool, error) {
 	exists, err := db.recordExists("channel_viewers", "channel_id", channelId)
 	if err != nil || exists {
 		return false, err
@@ -128,11 +136,11 @@ func (db database) WriteInitialData(channelId string, apiClient *twitch.ApiClien
 		return false, err
 	}
 
-	if err := db.bulkInsert("viewers", []string{"id", "login", "username"}, viewersValues, upsert); err != nil {
+	if err := tx.bulkInsert("viewers", []string{"id", "login", "username"}, viewersValues, upsert); err != nil {
 		return false, err
 	}
 
-	if err := db.bulkInsert("channel_viewers", []string{"channel_id", "viewer_id"}, chanViewersValues, upsert); err != nil {
+	if err := tx.bulkInsert("channel_viewers", []string{"channel_id", "viewer_id"}, chanViewersValues, upsert); err != nil {
 		return false, err
 	}
 
@@ -144,9 +152,15 @@ func (db database) WriteInitialData(channelId string, apiClient *twitch.ApiClien
 	return true, nil
 }
 
-func (db database) UpdatePresenceData(channelId string, onlineVips, offlineVips []helix.ChannelVips) error {
-	var viewersValues, chanOfflineViewersValues, chanOnlineViewersValues [][]any
-	var viewerIds []string
+func (db *database) UpdatePresenceData(channelId string, onlineVips, offlineVips []helix.ChannelVips) error {
+	if len(onlineVips) == 0 && len(offlineVips) == 0 {
+		return nil
+	}
+
+	var (
+		viewersValues, chanOfflineViewersValues, chanOnlineViewersValues [][]any
+		viewerIds []string
+	)
 
 	timeNow := time.Now().UTC().Format(time.RFC3339)
 
@@ -179,10 +193,10 @@ func (db database) UpdatePresenceData(channelId string, onlineVips, offlineVips 
 		return err
 	}
 
-	if err := db.bulkInsert("viewers", []string{"id", "login", "username"}, viewersValues, upsertNothingParams); err != nil {
+	if err := tx.bulkInsert("viewers", []string{"id", "login", "username"}, viewersValues, upsertNothingParams); err != nil {
 		return err
 	}
-	if err := db.bulkInsert("channel_viewers", []string{"channel_id", "viewer_id", "last_seen"}, chanOfflineViewersValues, upsertNothingParams); err != nil {
+	if err := tx.bulkInsert("channel_viewers", []string{"channel_id", "viewer_id", "last_seen"}, chanOfflineViewersValues, upsertNothingParams); err != nil {
 		return err
 	}
 
@@ -191,7 +205,7 @@ func (db database) UpdatePresenceData(channelId string, onlineVips, offlineVips 
 		return err
 	}
 
-	if err := db.bulkInsert("channel_viewers", []string{"channel_id", "viewer_id"}, chanOnlineViewersValues, upsertUpdateParams); err != nil {
+	if err := tx.bulkInsert("channel_viewers", []string{"channel_id", "viewer_id"}, chanOnlineViewersValues, upsertUpdateParams); err != nil {
 		return err
 	}
 
@@ -203,14 +217,18 @@ func (db database) UpdatePresenceData(channelId string, onlineVips, offlineVips 
 	return nil
 }
 
-func (db database) recordExists(tableName, columnName, value string) (bool, error) {
+func (db *database) recordExists(tableName, columnName, value string) (bool, error) {
 	var exists bool
 	query := fmt.Sprintf("SELECT EXISTS (SELECT 1 FROM %s WHERE %s = ?)", tableName, columnName)
 	err := db.QueryRow(query, value).Scan(&exists)
 	return exists, err
 }
 
-func (db database) bulkInsert(tableName string, columns []string, valGroups [][]any, upsertParams upsertParams) error {
+type transaction struct {
+	*sql.Tx
+}
+
+func (tx *transaction) bulkInsert(tableName string, columns []string, valGroups [][]any, upsertParams upsertParams) error {
 	if len(valGroups) == 0 {
 		return nil
 	}
@@ -237,7 +255,7 @@ func (db database) bulkInsert(tableName string, columns []string, valGroups [][]
 		upsertParams.upsertClause(),
 	)
 
-	_, err := db.Exec(query, args...)
+	_, err := tx.Exec(query, args...)
 
 	return err
 }

@@ -2,7 +2,6 @@ package app
 
 import (
 	"bufio"
-	"database/sql"
 	"errors"
 	"io"
 	"log"
@@ -71,14 +70,14 @@ func appendUsersUpdated(userNames []string, users *[]User) {
 	}
 }
 
-func WriteInitialDataToUsersFile(channelName string, apiClient *twitch.ApiClient) {
-	f, close, err := createUsersFileIfNotExists(channelName)
+func WriteInitialDataToUsersFile(channelId string, apiClient *twitch.ApiClient) {
+	f, close, err := createUsersFileIfNotExists(channelId)
 	if err != nil {
 		return
 	}
 	defer close()
 
-	usersFromResponse, err := apiClient.GetVips(channelName)
+	usersFromResponse, err := apiClient.GetChannelVips(channelId)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -95,7 +94,7 @@ func WriteInitialDataToUsersFile(channelName string, apiClient *twitch.ApiClient
 		log.Fatal(err)
 	}
 
-	log.Printf("Wrote initial data for %s", channelName)
+	log.Printf("Wrote initial data for %s", channelId)
 }
 
 func GetFirstUserFromFile(channelName string) string {

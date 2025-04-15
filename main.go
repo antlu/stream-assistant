@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log"
 	"maps"
-	"math/rand"
-	"net/http"
 	"os"
 	"slices"
 	"strings"
@@ -14,7 +12,6 @@ import (
 
 	twitchIRC "github.com/gempir/go-twitch-irc/v4"
 	"github.com/joho/godotenv"
-	"github.com/nicklaw5/helix/v2"
 
 	"github.com/antlu/stream-assistant/internal/app"
 	"github.com/antlu/stream-assistant/internal/crypto"
@@ -54,7 +51,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	apiClientForChannel := make(map[string]*twitch.ApiClient)
+	raffleManager := &app.RaffleManager{DB: db}
 
 	ircClient.OnSelfJoinMessage(func(message twitchIRC.UserJoinMessage) {
 		go func() {
@@ -64,9 +61,9 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			apiClientForChannel[channelName] = apiClient
 
 			channel := channels[channelName]
+			channel.ApiClient = apiClient
 			_, err = db.WriteInitialData(channel.ID, apiClient)
 			if err != nil {
 				log.Fatal(err)
@@ -92,7 +89,6 @@ func main() {
 	ircClient.OnPrivateMessage(func(message twitchIRC.PrivateMessage) {
 		channelName := message.Channel
 		channel := channels[channelName]
-		apiClient := apiClientForChannel[channelName]
 		msgAuthorName := message.User.DisplayName
 		msgAuthorID := message.User.ID
 		prefix := "!raffle vip"
@@ -105,7 +101,7 @@ func main() {
 			channel.Raffle.EnrollMsg = strings.TrimSpace(strings.TrimPrefix(message.Message, prefix))
 			channel.Raffle.IsActive = true
 
-			moderators, err := apiClient.GetModerators(channel.ID)
+			moderators, err := channel.ApiClient.GetModerators(channel.ID)
 			if err != nil {
 				log.Print(err)
 				return
@@ -117,97 +113,20 @@ func main() {
 					Name: moderator.UserName,
 				}
 			}
+
 			channel.Raffle.Ineligible[msgAuthorID] = app.RaffleParticipant{
 				ID:   msgAuthorID,
 				Name: msgAuthorName,
 			}
-			ircClient.Say(channelName, fmt.Sprintf("The raffle begins! Send %s to the chat to participate", channel.Raffle.EnrollMsg))
+
+			ircClient.Say(channelName, fmt.Sprintf("Raffle begins! Send %s to chat to participate", channel.Raffle.EnrollMsg))
 
 			time.AfterFunc(30*time.Second, func() {
-				channel.Raffle.IsActive = false
-
-				participantIDs := slices.Collect(maps.Keys(channel.Raffle.Participants))
-
-				rand.Shuffle(len(participantIDs), func(i, j int) {
-					participantIDs[i], participantIDs[j] = participantIDs[j], participantIDs[i]
-				})
-
-				vips, err := apiClient.GetChannelVips(channel.ID)
+				resultMsg, err := raffleManager.PickWinner(channel)
 				if err != nil {
 					log.Print(err)
-					return
 				}
 
-				vipIDs := make([]string, 0, len(vips))
-				for _, vip := range vips {
-					vipIDs = append(vipIDs, vip.UserID)
-				}
-
-				var (
-					loser  app.RaffleParticipant
-					winner app.RaffleParticipant
-				)
-
-				for _, participantID := range participantIDs {
-					if !slices.Contains(vipIDs, participantID) {
-						winner = channel.Raffle.Participants[participantID]
-						break
-					}
-					if loser.ID == "" {
-						loser = channel.Raffle.Participants[participantID]
-					}
-				}
-
-				if winner.ID == "" {
-					log.Print("No one has won")
-					return
-				}
-
-				for i := 0; i < 2; i++ {
-					log.Printf("VIPs routine: attempt %d", i+1)
-
-					if loser.ID != "" {
-						_, err := apiClient.RemoveChannelVip(&helix.RemoveChannelVipParams{
-							UserID:        loser.ID,
-							BroadcasterID: channel.ID,
-						})
-						if err != nil {
-							log.Print(err)
-						}
-
-						log.Printf("Demoted %s", loser.Name)
-					}
-
-					resp, err := apiClient.AddChannelVip(&helix.AddChannelVipParams{
-						UserID:        winner.ID,
-						BroadcasterID: channel.ID,
-					})
-					if err != nil {
-						log.Print(err)
-					}
-					if resp.StatusCode == http.StatusNoContent {
-						log.Printf("Promoted %s", winner.Name)
-						break
-					}
-					if resp.StatusCode == http.StatusConflict {
-						log.Print("No free slots. Will search who to demote")
-						err = db.QueryRow(`
-							SELECT viewer_id, username
-							FROM channel_viewers JOIN viewers ON viewer_id = id
-							WHERE channel_id = ?
-							ORDER BY datetime(last_seen) ASC NULLS FIRST LIMIT 1
-						`, channel.ID).Scan(&loser.ID, &loser.Name)
-						if err != nil {
-							log.Print(err)
-						}
-					}
-				}
-
-				unvipMsg := ""
-				if loser.ID != "" {
-					unvipMsg = fmt.Sprintf("%s has lost their status. ", loser.Name)
-				}
-				resultMsg := fmt.Sprintf("%sNew VIP — %s!", unvipMsg, winner.Name)
 				ircClient.Say(channelName, resultMsg)
 			})
 

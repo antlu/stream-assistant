@@ -3,6 +3,8 @@ package app
 import (
 	"sync"
 	"time"
+
+	"github.com/antlu/stream-assistant/internal/twitch"
 )
 
 type User struct {
@@ -29,6 +31,7 @@ type Channel struct {
 	Name   string
 	IsLive bool
 	Raffle Raffle
+	ApiClient *twitch.ApiClient
 }
 
 type ChannelsDict map[string]*Channel

@@ -72,7 +72,8 @@ func OpenDB() *database {
 			id INTEGER PRIMARY KEY,
 			login TEXT NOT NULL,
 			access_token TEXT NOT NULL,
-			refresh_token TEXT NOT NULL
+			refresh_token TEXT NOT NULL,
+			synced_at TEXT
 		);
 
 		CREATE TABLE IF NOT EXISTS viewers (

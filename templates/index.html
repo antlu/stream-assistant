@@ -1,22 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <link rel="icon" href="data:,"> <!-- Blocks favicon requests -->
-    <title>Stream Assistant</title>
-  </head>
-  <body>
-    {{if .flashes }}
-      {{range .flashes}} {{.}} <br> {{end}}
-    {{else}}
-      <a href="https://id.twitch.tv/oauth2/authorize{{"" -}}
-      ?client_id={{.twitchParams.Get "client_id" -}}
-      &redirect_uri={{.twitchParams.Get "redirect_uri" -}}
-      &response_type={{.twitchParams.Get "response_type" -}}
-      &scope={{.twitchParams.Get "scope" -}}
-      &state={{.twitchParams.Get "state"}}">
-        Login with Twitch
-      </a>
-    {{end}}
-  </body>
-</html>
+{{define "body"}}
+  {{if .flashes }}
+    {{range .flashes}} {{.}} <br> {{end}}
+  {{else}}
+    <a href="https://id.twitch.tv/oauth2/authorize{{"" -}}
+    ?client_id={{.twitchParams.Get "client_id" -}}
+    &redirect_uri={{.twitchParams.Get "redirect_uri" -}}
+    &response_type={{.twitchParams.Get "response_type" -}}
+    &scope={{.twitchParams.Get "scope" -}}
+    &state={{.twitchParams.Get "state"}}">
+      Login with Twitch
+    </a>
+  {{end}}
+{{end}}

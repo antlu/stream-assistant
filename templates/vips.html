@@ -1,0 +1,16 @@
+{{define "body"}}
+  <h1>{{.channelName}}'s channel</h1>
+
+  <table>
+    <tr>
+      <th scope="col">Name</th>
+      <th scope="col">Datetime</th>
+    </tr>
+    {{range .vips}}
+      <tr>
+        <td>{{.UserName}}</td>
+        <td>{{.LastSeen}}</td>
+      </tr>
+    {{end}}
+  </table>
+{{end}}

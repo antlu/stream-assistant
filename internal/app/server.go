@@ -3,6 +3,7 @@ package app
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -31,11 +32,6 @@ func prepareTwitchAuthQueryParams() url.Values {
 }
 
 func StartWebServer(app *App, tokenManager *twitch.TokenManager) {
-	tmpl, err := template.ParseFiles("templates/index.html")
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	cookieStore := sessions.NewCookieStore([]byte(os.Getenv("SA_SECURE_KEY")))
 
 	mux := http.NewServeMux()
@@ -58,7 +54,7 @@ func StartWebServer(app *App, tokenManager *twitch.TokenManager) {
 			return
 		}
 
-		tmpl.Execute(w, map[string]any{
+		renderTemplate(w, "index", map[string]any{
 			"flashes":      flashes,
 			"twitchParams": twitchAuthQueryParams,
 		})
@@ -132,8 +128,55 @@ func StartWebServer(app *App, tokenManager *twitch.TokenManager) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})
 
+	mux.HandleFunc("GET /channels/{channel_name}/vips", func(w http.ResponseWriter, r *http.Request) {
+		channelName := r.PathValue("channel_name")
+		rows, err := app.db.Query(
+			`SELECT v.username, cv.last_seen
+			FROM channels AS c
+			JOIN channel_viewers AS cv ON c.id = cv.channel_id
+			JOIN viewers AS v ON cv.viewer_id = v.id
+			WHERE c.login = ?
+			ORDER BY datetime(cv.last_seen) ASC NULLS FIRST`,
+			channelName,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		vips := []channelVip{}
+		for rows.Next() {
+			vip := channelVip{ChannelName: channelName}
+			err = rows.Scan(&vip.Username, &vip.LastSeen)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			vips = append(vips, vip)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		renderTemplate(w, "vips", map[string]any{"channelName": channelName, "vips": vips})
+	})
+
 	go func() {
 		log.Print("Server is listening on port 3000")
 		log.Print(http.ListenAndServe(":3000", mux))
 	}()
+}
+
+func renderTemplate(w http.ResponseWriter, page string, data any) error {
+	tmpl, err := template.ParseFiles(
+		"templates/base.html",
+		fmt.Sprintf("templates/%s.html", page),
+	)
+	if err != nil {
+		return fmt.Errorf("parsing templates: %v", err)
+	}
+
+	return tmpl.Execute(w, data)
 }

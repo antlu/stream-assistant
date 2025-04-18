@@ -38,8 +38,7 @@ func StartWebServer(app *App, tokenManager *twitch.TokenManager) {
 
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		session, err := cookieStore.Get(r, "sa_session")
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if respondWithError(w, err, http.StatusInternalServerError) {
 			return
 		}
 		session.Options.MaxAge = 0
@@ -49,8 +48,7 @@ func StartWebServer(app *App, tokenManager *twitch.TokenManager) {
 		session.Values["state"] = twitchAuthQueryParams.Get("state")
 		flashes := session.Flashes()
 		err = session.Save(r, w)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if respondWithError(w, err, http.StatusInternalServerError) {
 			return
 		}
 
@@ -62,8 +60,7 @@ func StartWebServer(app *App, tokenManager *twitch.TokenManager) {
 
 	mux.HandleFunc("GET /auth", func(w http.ResponseWriter, r *http.Request) {
 		session, err := cookieStore.Get(r, "sa_session")
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if respondWithError(w, err, http.StatusInternalServerError) {
 			return
 		}
 
@@ -79,8 +76,7 @@ func StartWebServer(app *App, tokenManager *twitch.TokenManager) {
 		}
 
 		tokensData, err := twitch.ExchangeCodeForTokens(r.URL.Query().Get("code"))
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if respondWithError(w, err, http.StatusInternalServerError) {
 			return
 		}
 
@@ -120,8 +116,7 @@ func StartWebServer(app *App, tokenManager *twitch.TokenManager) {
 
 		session.AddFlash("Authorized")
 		err = session.Save(r, w)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if respondWithError(w, err, http.StatusInternalServerError) {
 			return
 		}
 
@@ -139,8 +134,7 @@ func StartWebServer(app *App, tokenManager *twitch.TokenManager) {
 			ORDER BY datetime(cv.last_seen) ASC NULLS FIRST`,
 			channelName,
 		)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if respondWithError(w, err, http.StatusInternalServerError) {
 			return
 		}
 
@@ -148,15 +142,14 @@ func StartWebServer(app *App, tokenManager *twitch.TokenManager) {
 		for rows.Next() {
 			vip := channelVip{ChannelName: channelName}
 			err = rows.Scan(&vip.Username, &vip.LastSeen)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+			if respondWithError(w, err, http.StatusInternalServerError) {
 				return
 			}
 			vips = append(vips, vip)
 		}
 		rows.Close()
-		if err := rows.Err(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		err = rows.Err()
+		if respondWithError(w, err, http.StatusInternalServerError) {
 			return
 		}
 
@@ -179,4 +172,12 @@ func renderTemplate(w http.ResponseWriter, page string, data any) error {
 	}
 
 	return tmpl.Execute(w, data)
+}
+
+func respondWithError(w http.ResponseWriter, err error, status int) bool {
+	if err != nil {
+		http.Error(w, err.Error(), status)
+		return true
+	}
+	return false
 }

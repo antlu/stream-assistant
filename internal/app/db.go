@@ -114,7 +114,7 @@ func (db *database) WriteInitialData(channelId string, apiClient *twitch.ApiClie
 	}
 
 	channelVips, err := apiClient.GetChannelVips(channelId)
-	if err != nil {
+	if err != nil || len(channelVips) == 0 {
 		return false, err
 	}
 

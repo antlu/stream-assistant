@@ -107,7 +107,7 @@ func (db *database) Begin() (*transaction, error) {
 	return &transaction{tx}, nil
 }
 
-func (db *database) WriteInitialData(channelId string, apiClient *twitch.ApiClient) (bool, error) {
+func (db *database) WriteInitialData(channelId string, apiClient *twitch.APIClient) (bool, error) {
 	exists, err := db.recordExists("channel_viewers", "channel_id", channelId)
 	if err != nil || exists {
 		return false, err
@@ -160,7 +160,7 @@ func (db *database) UpdatePresenceData(channelId string, onlineVips, offlineVips
 
 	var (
 		viewersValues, chanOfflineViewersValues, chanOnlineViewersValues [][]any
-		viewerIds []string
+		viewerIds                                                        []string
 	)
 
 	timeNow := time.Now().UTC().Format(time.RFC3339)

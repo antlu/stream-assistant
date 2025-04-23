@@ -12,21 +12,22 @@ import (
 	"github.com/nicklaw5/helix/v2"
 )
 
-type ApiClient struct {
+type APIClient struct {
 	*helix.Client
 	ready chan struct{}
 }
 
-func NewApiClient(channelName string, tokenManager *TokenManager) (*ApiClient, error) {
+func NewAPIClient(channelName string, tokenManager *TokenManager) (*APIClient, error) {
 	client, err := helix.NewClient(&helix.Options{
-		ClientID:        os.Getenv("SA_CLIENT_ID"),
-		ClientSecret:    os.Getenv("SA_CLIENT_SECRET"),
+		APIBaseURL:   os.Getenv("SA_TWITCH_API_BASE_URL"),
+		ClientID:     os.Getenv("SA_CLIENT_ID"),
+		ClientSecret: os.Getenv("SA_CLIENT_SECRET"),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	wrapper := ApiClient{Client: client, ready: make(chan struct{})}
+	wrapper := APIClient{Client: client, ready: make(chan struct{})}
 	go wrapper.getTokens(channelName, tokenManager)
 
 	wrapper.OnUserAccessTokenRefreshed(func(accessToken, refreshToken string) {
@@ -36,16 +37,16 @@ func NewApiClient(channelName string, tokenManager *TokenManager) (*ApiClient, e
 	return &wrapper, nil
 }
 
-func (ac ApiClient) waitUntilReady() error {
+func (ac APIClient) waitUntilReady() error {
 	select {
 	case <-ac.ready:
 		return nil
 	case <-time.After(5 * time.Minute):
-    return errors.New("client timeout")
+		return errors.New("client timeout")
 	}
 }
 
-func (ac ApiClient) IsReady() bool {
+func (ac APIClient) IsReady() bool {
 	select {
 	case <-ac.ready:
 		return true
@@ -54,7 +55,7 @@ func (ac ApiClient) IsReady() bool {
 	}
 }
 
-func (ac ApiClient) getTokens(channelName string, tokenManager *TokenManager) {
+func (ac APIClient) getTokens(channelName string, tokenManager *TokenManager) {
 	var (
 		accessToken, refreshToken string
 		err                       error
@@ -80,7 +81,7 @@ func (ac ApiClient) getTokens(channelName string, tokenManager *TokenManager) {
 	}
 }
 
-func (ac ApiClient) GetUsersInfo(names ...string) ([]helix.User, error) {
+func (ac APIClient) GetUsersInfo(names ...string) ([]helix.User, error) {
 	if err := ac.waitUntilReady(); err != nil {
 		return nil, err
 	}
@@ -94,7 +95,7 @@ func (ac ApiClient) GetUsersInfo(names ...string) ([]helix.User, error) {
 	return resp.Data.Users, nil
 }
 
-func (ac ApiClient) GetChannelVips(channelId string) ([]helix.ChannelVips, error) {
+func (ac APIClient) GetChannelVips(channelId string) ([]helix.ChannelVips, error) {
 	if err := ac.waitUntilReady(); err != nil {
 		return nil, err
 	}
@@ -114,7 +115,7 @@ func (ac ApiClient) GetChannelVips(channelId string) ([]helix.ChannelVips, error
 	return resp.Data.ChannelsVips, nil
 }
 
-func (ac ApiClient) GetModerators(channelId string) ([]helix.Moderator, error) {
+func (ac APIClient) GetModerators(channelId string) ([]helix.Moderator, error) {
 	if err := ac.waitUntilReady(); err != nil {
 		return nil, err
 	}
@@ -131,7 +132,7 @@ func (ac ApiClient) GetModerators(channelId string) ([]helix.Moderator, error) {
 	return resp.Data.Moderators, nil
 }
 
-func (ac ApiClient) GetLiveStreams(logins []string) (map[string]bool, error) {
+func (ac APIClient) GetLiveStreams(logins []string) (map[string]bool, error) {
 	if err := ac.waitUntilReady(); err != nil {
 		return nil, err
 	}

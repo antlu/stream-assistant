@@ -25,7 +25,7 @@ func (rm RaffleManager) PickWinner(channel *Channel) (string, error) {
 		participantIDs[i], participantIDs[j] = participantIDs[j], participantIDs[i]
 	})
 
-	vips, err := channel.ApiClient.GetChannelVips(channel.ID)
+	vips, err := channel.APIClient.GetChannelVips(channel.ID)
 	if err != nil {
 		return "", err
 	}
@@ -58,7 +58,7 @@ func (rm RaffleManager) PickWinner(channel *Channel) (string, error) {
 		log.Printf("VIPs routine: attempt %d", i+1)
 
 		if loser.ID != "" {
-			_, err := channel.ApiClient.RemoveChannelVip(&helix.RemoveChannelVipParams{
+			_, err := channel.APIClient.RemoveChannelVip(&helix.RemoveChannelVipParams{
 				UserID:        loser.ID,
 				BroadcasterID: channel.ID,
 			})
@@ -69,7 +69,7 @@ func (rm RaffleManager) PickWinner(channel *Channel) (string, error) {
 			log.Printf("Demoted %s", loser.Name)
 		}
 
-		resp, err := channel.ApiClient.AddChannelVip(&helix.AddChannelVipParams{
+		resp, err := channel.APIClient.AddChannelVip(&helix.AddChannelVipParams{
 			UserID:        winner.ID,
 			BroadcasterID: channel.ID,
 		})

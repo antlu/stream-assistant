@@ -14,12 +14,12 @@ type channelParams struct {
 
 type App struct {
 	ircClient *twitch.IRCClient
-	apiClient *twitch.ApiClient
+	apiClient *twitch.APIClient
 	db        interfaces.DBQueryExecCloser
 	channels  ChannelsDict
 }
 
-func New(ircClient *twitch.IRCClient, apiClient *twitch.ApiClient, db interfaces.DBQueryExecCloser) *App {
+func New(ircClient *twitch.IRCClient, apiClient *twitch.APIClient, db interfaces.DBQueryExecCloser) *App {
 	return &App{
 		ircClient: ircClient,
 		apiClient: apiClient,

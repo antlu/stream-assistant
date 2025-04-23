@@ -73,7 +73,7 @@ type ReconnParams struct {
 }
 
 type handler struct {
-	Client       *twitch.ApiClient
+	Client       *twitch.APIClient
 	channels     ChannelsDict
 	closeOldConn func()
 }
@@ -152,7 +152,7 @@ func (h handler) handleNotification(event PayloadEvent, subType string) {
 	}
 }
 
-func createSubRequester(client *twitch.ApiClient, sessionID string) func(string, string) {
+func createSubRequester(client *twitch.APIClient, sessionID string) func(string, string) {
 	return func(channelID, subType string) {
 		_, err := client.CreateEventSubSubscription(&helix.EventSubSubscription{
 			Type:      subType,
@@ -166,7 +166,7 @@ func createSubRequester(client *twitch.ApiClient, sessionID string) func(string,
 	}
 }
 
-func StartTwitchWSCommunication(apiClient *twitch.ApiClient, channels ChannelsDict, params ReconnParams) {
+func StartTwitchWSCommunication(apiClient *twitch.APIClient, channels ChannelsDict, params ReconnParams) {
 	serverAddr := "wss://eventsub.wss.twitch.tv/ws"
 	if params.ReconnectUrl != "" {
 		serverAddr = params.ReconnectUrl

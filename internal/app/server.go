@@ -82,6 +82,7 @@ func StartWebServer(app *App, tokenManager *twitch.TokenManager) {
 
 		go func() {
 			apiClient, err := helix.NewClient(&helix.Options{
+				APIBaseURL:      os.Getenv("SA_TWITCH_API_BASE_URL"),
 				ClientID:        os.Getenv("SA_CLIENT_ID"),
 				ClientSecret:    os.Getenv("SA_CLIENT_SECRET"),
 				UserAccessToken: tokensData.AccessToken,

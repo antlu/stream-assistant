@@ -31,7 +31,7 @@ func main() {
 
 	botName := os.Getenv("SA_BOT_NAME")
 
-	apiClient, err := twitch.NewApiClient(botName, tokenManager)
+	apiClient, err := twitch.NewAPIClient(botName, tokenManager)
 	if err != nil {
 		log.Fatal("Error creating API client")
 	}
@@ -57,13 +57,13 @@ func main() {
 		go func() {
 			channelName := message.Channel
 			log.Printf("Joined %s", channelName)
-			apiClient, err := twitch.NewApiClient(channelName, tokenManager)
+			apiClient, err := twitch.NewAPIClient(channelName, tokenManager)
 			if err != nil {
 				log.Fatal(err)
 			}
 
 			channel := channels[channelName]
-			channel.ApiClient = apiClient
+			channel.APIClient = apiClient
 			_, err = db.WriteInitialData(channel.ID, apiClient)
 			if err != nil {
 				log.Fatal(err)
@@ -101,7 +101,7 @@ func main() {
 			channel.Raffle.EnrollMsg = strings.TrimSpace(strings.TrimPrefix(message.Message, prefix))
 			channel.Raffle.IsActive = true
 
-			moderators, err := channel.ApiClient.GetModerators(channel.ID)
+			moderators, err := channel.APIClient.GetModerators(channel.ID)
 			if err != nil {
 				log.Print(err)
 				return
@@ -153,7 +153,7 @@ func main() {
 	err = ircClient.Connect()
 	if errors.Is(err, twitchIRC.ErrLoginAuthenticationFailed) {
 		ircClient.Reconnect(botName, tokenManager)
-	}	else if err != nil {
+	} else if err != nil {
 		log.Fatalf("Error connecting to Twitch: %v", err)
 	}
 }

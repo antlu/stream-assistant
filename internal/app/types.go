@@ -27,11 +27,11 @@ type Raffle struct {
 }
 
 type Channel struct {
-	ID     string
-	Name   string
-	IsLive bool
-	Raffle Raffle
-	ApiClient *twitch.ApiClient
+	ID        string
+	Name      string
+	IsLive    bool
+	Raffle    Raffle
+	APIClient *twitch.APIClient
 }
 
 type ChannelsDict map[string]*Channel
@@ -44,6 +44,6 @@ type Channels struct {
 
 type channelVip struct {
 	ChannelName string
-	Username string
-	LastSeen string
+	Username    string
+	LastSeen    string
 }

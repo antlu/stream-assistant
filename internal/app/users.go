@@ -70,7 +70,7 @@ func appendUsersUpdated(userNames []string, users *[]User) {
 	}
 }
 
-func WriteInitialDataToUsersFile(channelId string, apiClient *twitch.ApiClient) {
+func WriteInitialDataToUsersFile(channelId string, apiClient *twitch.APIClient) {
 	f, close, err := createUsersFileIfNotExists(channelId)
 	if err != nil {
 		return
@@ -151,7 +151,7 @@ func appendUserToFile(channelName string, userName string) {
 	}
 }
 
-func GetOnlineOfflineVips(ircClient *twitch.IRCClient, apiClient *twitch.ApiClient, channelName, channelId string) ([]helix.ChannelVips, []helix.ChannelVips, error) {
+func GetOnlineOfflineVips(ircClient *twitch.IRCClient, apiClient *twitch.APIClient, channelName, channelId string) ([]helix.ChannelVips, []helix.ChannelVips, error) {
 	userLogins, err := ircClient.Userlist(channelName)
 	if err != nil {
 		return nil, nil, err

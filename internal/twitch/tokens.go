@@ -31,7 +31,7 @@ type TokenManager struct {
 	cache        map[string]tokens
 	store        interfaces.DBQueryExecCloser
 	cipher       crypto.Cipher
-	refreshQueue map[string]chan (tokens)
+	refreshQueue map[string]chan tokens
 }
 
 func NewTokenManager(store interfaces.DBQueryExecCloser, cipher crypto.Cipher) *TokenManager {
@@ -39,7 +39,7 @@ func NewTokenManager(store interfaces.DBQueryExecCloser, cipher crypto.Cipher) *
 		store:        store,
 		cache:        make(map[string]tokens),
 		cipher:       cipher,
-		refreshQueue: make(map[string]chan (tokens)),
+		refreshQueue: make(map[string]chan tokens),
 	}
 }
 

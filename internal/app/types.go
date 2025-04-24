@@ -41,9 +41,3 @@ type Channels struct {
 	Names []string
 	Dict  ChannelsDict
 }
-
-type channelVip struct {
-	ChannelName string
-	Username    string
-	LastSeen    string
-}

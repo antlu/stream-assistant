@@ -2,15 +2,25 @@
   <h1>{{.channelName}}'s channel</h1>
 
   <table>
-    <tr>
-      <th scope="col">Name</th>
-      <th scope="col">Datetime</th>
-    </tr>
-    {{range .vips}}
+    <thead>
       <tr>
-        <td>{{.UserName}}</td>
-        <td>{{.LastSeen}}</td>
+        <th scope="col">Name</th>
+        <th scope="col">Datetime</th>
       </tr>
-    {{end}}
+    </thead>
+    <tbody>
+      {{range .vips}}
+        <tr>
+          <td>{{.Username}}</td>
+          <td>
+            {{if .LastSeen.Valid}}
+              {{.LastSeen.String}}
+            {{else}}
+              N/A
+            {{end}}
+          </td>
+        </tr>
+      {{end}}
+    </tbody>
   </table>
 {{end}}

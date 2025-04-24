@@ -13,6 +13,13 @@ import (
 	"github.com/nicklaw5/helix/v2"
 )
 
+type channelVip struct {
+	ChannelName     string
+	Username        string
+	LastSeen        sql.NullString
+	LastMessageSent sql.NullString
+}
+
 type upsertStrategy int
 
 const (

@@ -98,7 +98,11 @@ func main() {
 				return
 			}
 
-			channel.Raffle.EnrollMsg = strings.TrimSpace(strings.TrimPrefix(message.Message, prefix))
+			enrollMsg := strings.TrimSpace(strings.TrimPrefix(message.Message, prefix))
+			if enrollMsg == "" {
+				return
+			}
+			channel.Raffle.EnrollMsg = enrollMsg
 			channel.Raffle.IsActive = true
 
 			moderators, err := channel.APIClient.GetModerators(channel.ID)

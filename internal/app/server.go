@@ -15,6 +15,8 @@ import (
 	"github.com/nicklaw5/helix/v2"
 )
 
+const twitchAuthURL = "https://id.twitch.tv/oauth2/authorize"
+
 func generateSecret() string {
 	bytes := make([]byte, 16)
 	rand.Read(bytes)
@@ -53,8 +55,8 @@ func StartWebServer(app *App, tokenManager *twitch.TokenManager) {
 		}
 
 		renderTemplate(w, "index", map[string]any{
-			"flashes":      flashes,
-			"twitchParams": twitchAuthQueryParams,
+			"flashes":                 flashes,
+			"twitchAuthURLWithParams": template.URL(fmt.Sprintf("%s?%s", twitchAuthURL, twitchAuthQueryParams.Encode())),
 		})
 	})
 

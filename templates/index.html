@@ -4,12 +4,7 @@
   {{if .flashes }}
     {{range .flashes}} {{.}} <br> {{end}}
   {{else}}
-    <a href="https://id.twitch.tv/oauth2/authorize{{"" -}}
-    ?client_id={{.twitchParams.Get "client_id" -}}
-    &redirect_uri={{.twitchParams.Get "redirect_uri" -}}
-    &response_type={{.twitchParams.Get "response_type" -}}
-    &scope={{.twitchParams.Get "scope" -}}
-    &state={{.twitchParams.Get "state"}}">
+    <a href="{{.twitchAuthURLWithParams}}">
       Login with Twitch
     </a>
   {{end}}

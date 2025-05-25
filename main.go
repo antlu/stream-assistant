@@ -76,7 +76,7 @@ func main() {
 					if err != nil {
 						log.Print(err)
 					} else {
-						err = db.UpdatePresenceData(channelName, onlineVips, offlineVips)
+						err = db.UpdatePresenceData(channel.ID, onlineVips, offlineVips)
 						if err != nil {
 							log.Print(err)
 						}

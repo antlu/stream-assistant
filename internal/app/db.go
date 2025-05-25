@@ -213,7 +213,7 @@ func (db *database) UpdatePresenceData(channelId string, onlineVips, offlineVips
 		return err
 	}
 
-	if err := tx.bulkInsert("channel_viewers", []string{"channel_id", "viewer_id"}, chanOnlineViewersValues, upsertUpdateParams); err != nil {
+	if err := tx.bulkInsert("channel_viewers", []string{"channel_id", "viewer_id", "last_seen"}, chanOnlineViewersValues, upsertUpdateParams); err != nil {
 		return err
 	}
 

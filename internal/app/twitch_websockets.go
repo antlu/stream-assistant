@@ -124,7 +124,7 @@ func (h handler) OnMessage(conn *gws.Conn, message *gws.Message) {
 			h.Client,
 			h.channels,
 			ReconnParams{msg.Payload.Session.ReconnectUrl, func() {
-				conn.WriteClose(1000, []byte("Old connection"))
+				conn.WriteClose(1000, []byte("old connection"))
 			}},
 		)
 	case "revocation":
@@ -142,8 +142,10 @@ func (h handler) handleNotification(event PayloadEvent, subType string) {
 	switch subType {
 	case streamOnline:
 		h.channels[channelName].IsLive = true
+		log.Printf("%s started streaming", channelName)
 	case streamOffline:
 		h.channels[channelName].IsLive = false
+		log.Printf("%s stopped streaming", channelName)
 	case channelVipAdd:
 		appendUserToFile(channelName, event.UserLogin)
 	default:

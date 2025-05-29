@@ -1,9 +1,10 @@
 {{define "body"}}
-  <h1>{{.channelName}}'s channel</h1>
+  <h1>{{.channelName}}'s VIPs</h1>
 
   <table>
     <thead>
       <tr>
+        <th scope="col">#</th>
         <th scope="col">Name</th>
         <th scope="col">Datetime</th>
       </tr>
@@ -11,8 +12,9 @@
     <tbody>
       {{range .vips}}
         <tr>
-          <td>{{.Username}}</td>
-          <td>
+          <td class="number"></td>
+          <td class="name">{{.Username}}</td>
+          <td class="datetime">
             {{if .LastSeen.Valid}}
               {{.LastSeen.String}}
             {{else}}
@@ -23,4 +25,38 @@
       {{end}}
     </tbody>
   </table>
+
+  <script>
+    const formatter = new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    })
+
+    document.querySelectorAll('td.datetime').forEach(td => {
+      const date = new Date(td.textContent.trim());
+      if (!isNaN(date)) {
+        td.textContent = formatter.format(date);
+      }
+    })
+  </script>
+
+  <style>
+    table {
+      counter-reset: row-number;
+      border-collapse: collapse;
+    }
+
+    tbody tr {
+      counter-increment: row-number;
+    }
+
+    tbody td.number::before {
+      content: counter(row-number);
+    }
+
+    td, th {
+      border: 1px solid #ccc;
+      padding: 4px 8px;
+  }
+  </style>
 {{end}}
